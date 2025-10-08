@@ -22,6 +22,7 @@ Preferences prefs;
 
 void setupBLEServer();
 void scanWiFi();
+void autoconnectToWifi();
 void saveCreds(const std::string &ssid, const std::string &pass);
 bool loadCreds(std::string &ssid, std::string &pass);
 std::pair<std::string, std::string> splitStr(const std::string &in, char sep);
@@ -44,22 +45,17 @@ class WifiCredsCharacteristicCallbacks : public BLECharacteristicCallbacks
     std::string ssid = result.first;
     std::string pass = result.second;
 
-    Serial.println(ssid.c_str());
-    Serial.println(pass.c_str());
     WiFi.begin(ssid.c_str(), pass.c_str());
 
-    wl_status_t res = (wl_status_t)WiFi.waitForConnectResult(15000);
-    Serial.printf("Connect result: %d\n", res);
+    wl_status_t res = (wl_status_t)WiFi.waitForConnectResult(8000);
+
     if (res == WL_CONNECTED)
     {
-      Serial.print("IP: ");
-      Serial.println(WiFi.localIP());
       saveCreds(ssid, pass);
     }
-    else
-    {
-      Serial.printf("Status=%d (6=DISCONNECTED, 4=CONNECT_FAILED, 1=NO_SSID)\n", WiFi.status());
-    }
+
+    pCharacteristic->setValue(std::to_string(res));
+    // pCharacteristic->notify();
   }
 };
 
@@ -84,30 +80,13 @@ void setup()
 {
   Serial.begin(9600);
   pinMode(BT_LED_PIN, OUTPUT);
+  Serial.println("Starting ...");
 
   WiFi.mode(WIFI_STA);
 
-  std::string ssid;
-  std::string pass;
-
-  if (loadCreds(ssid, pass))
-  {
-    WiFi.begin(ssid.c_str(), pass.c_str());
-
-    wl_status_t res = (wl_status_t)WiFi.waitForConnectResult(15000);
-    Serial.printf("Connect result: %d\n", res);
-    if (res == WL_CONNECTED)
-    {
-      Serial.print("IP: ");
-      Serial.println(WiFi.localIP());
-    }
-    else
-    {
-      Serial.printf("Status=%d (6=DISCONNECTED, 4=CONNECT_FAILED, 1=NO_SSID)\n", WiFi.status());
-    }
-  }
-
+  // autoconnectToWifi();
   setupBLEServer();
+  Serial.println("BLE Started");
 }
 
 void loop()
@@ -130,7 +109,7 @@ void setupBLEServer()
 
   wifiCredsCharacteristic = pService->createCharacteristic(
       WIFI_CREDS_CHARACTERISTIC_ID,
-      BLECharacteristic::PROPERTY_WRITE);
+      BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ);
 
   wifiNetworksCharacteristic->setCallbacks(new WifiNetworksCharacteristicCallbacks());
   wifiCredsCharacteristic->setCallbacks(new WifiCredsCharacteristicCallbacks());
@@ -199,4 +178,27 @@ std::pair<std::string, std::string> splitStr(const std::string &in, char sep)
   if (pos == std::string::npos)
     return {"", ""};
   return {in.substr(0, pos), in.substr(pos + 1)};
+}
+
+void autoconnectToWifi()
+{
+  std::string ssid;
+  std::string pass;
+
+  if (loadCreds(ssid, pass))
+  {
+    WiFi.begin(ssid.c_str(), pass.c_str());
+
+    wl_status_t res = (wl_status_t)WiFi.waitForConnectResult(15000);
+    Serial.printf("Connect result: %d\n", res);
+    if (res == WL_CONNECTED)
+    {
+      Serial.print("IP: ");
+      Serial.println(WiFi.localIP());
+    }
+    else
+    {
+      Serial.printf("Status=%d (6=DISCONNECTED, 4=CONNECT_FAILED, 1=NO_SSID)\n", WiFi.status());
+    }
+  }
 }
