@@ -55,6 +55,21 @@ void autoconnectToWifi()
         }
     }
 }
+
+wl_status_t connectToWifi(std::string ssid, std::string pass)
+{
+    WiFi.begin(ssid.c_str(), pass.c_str());
+
+    wl_status_t res = (wl_status_t)WiFi.waitForConnectResult(8000);
+
+    if (res == WL_CONNECTED)
+    {
+        saveCreds(ssid, pass);
+    }
+
+    return res;
+}
+
 void saveCreds(const std::string &ssid, const std::string &pass)
 {
     prefs.begin("wifi", false);
@@ -64,6 +79,7 @@ void saveCreds(const std::string &ssid, const std::string &pass)
 
     prefs.end();
 }
+
 bool loadCreds(std::string &ssid, std::string &pass)
 {
     prefs.begin("wifi", true);
