@@ -1,5 +1,8 @@
+#include <Arduino.h>
 #include <string>
 #include <iostream>
+
+String chipId = String((uint32_t)ESP.getEfuseMac(), HEX);
 
 std::pair<std::string, std::string> splitStr(const std::string &in, char sep)
 {

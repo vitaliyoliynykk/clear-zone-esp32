@@ -30,7 +30,7 @@ void IRAM_ATTR onBootPressed()
 void setup()
 {
   Serial.begin(9600);
-  Serial.println("Starting Clear Zone Module");
+  Serial.printf("Starting Clear Zone Module [ID]: %s \n", chipId);
 
   pinMode(BT_LED_PIN, OUTPUT);
   pinMode(BOOT_PIN, INPUT_PULLUP);
