@@ -3,6 +3,7 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLEAdvertising.h>
+#include <BLESecurity.h>
 #include "ble_manager.h"
 #include "wifi_manager.h"
 #include "utils.h"
@@ -35,6 +36,11 @@ class WifiCredsCharacteristicCallbacks : public BLECharacteristicCallbacks
     std::string pass = result.second;
 
     wl_status_t res = connectToWifi(ssid, pass);
+
+    if (res == WL_CONNECTED)
+    {
+      toggleDeviceBLEAdvertising(false);
+    }
 
     pCharacteristic->setValue(std::to_string(res));
     pCharacteristic->notify();
@@ -84,5 +90,17 @@ void setupBLEServer()
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(BLEUUID(BT_SERVICE_ID));
 
-  BLEDevice::startAdvertising();
+  // BLEDevice::startAdvertising();
+}
+
+void toggleDeviceBLEAdvertising(bool isAdvertising)
+{
+  if (isAdvertising)
+  {
+    BLEDevice::startAdvertising();
+  }
+  else
+  {
+    BLEDevice::stopAdvertising();
+  }
 }
