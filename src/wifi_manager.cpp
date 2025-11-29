@@ -34,7 +34,7 @@ void scanWiFi(BLECharacteristic *notifyNetworks)
         notifyNetworks->notify();
     }
 }
-void autoconnectToWifi()
+bool autoconnectToWifi()
 {
     std::string ssid;
     std::string pass;
@@ -48,12 +48,16 @@ void autoconnectToWifi()
         {
             Serial.print("Connected. IP: ");
             Serial.println(WiFi.localIP());
+            return true;
         }
         else
         {
             Serial.printf("Status=%d (6=DISCONNECTED, 4=CONNECT_FAILED, 1=NO_SSID)\n", WiFi.status());
+            return false;
         }
     }
+
+    return false;
 }
 
 wl_status_t connectToWifi(std::string ssid, std::string pass)

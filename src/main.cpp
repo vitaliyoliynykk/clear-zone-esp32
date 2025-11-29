@@ -3,6 +3,7 @@
 #include "wifi_manager.h"
 #include "utils.h"
 #include "ble_manager.h"
+#include "http_manager.h"
 
 constexpr uint32_t PAIRING_HOLD_MS = 5000;
 volatile bool bootPressed = false;
@@ -30,7 +31,7 @@ void IRAM_ATTR onBootPressed()
 void setup()
 {
   Serial.begin(9600);
-  Serial.printf("Starting Clear Zone Module [ID]: %s \n", chipId);
+  Serial.printf("Starting Clear Zone Module [ID]: %s \n", CHIP_ID);
 
   pinMode(BT_LED_PIN, OUTPUT);
   pinMode(BOOT_PIN, INPUT_PULLUP);
@@ -38,7 +39,12 @@ void setup()
 
   WiFi.mode(WIFI_STA);
 
-  autoconnectToWifi();
+  bool isConnected = autoconnectToWifi();
+
+  if(isConnected) {
+    registerHttpsRequest();
+  }
+
   setupBLEServer();
 }
 
@@ -57,7 +63,7 @@ void handlePairingModeEnter()
     {
       pairingActive = true;
       bootPressed = false;
-      Serial.println("Entered pairing");
+
       toggleDeviceBLEAdvertising(true);
     }
     else if (!digitalRead(BOOT_PIN))
@@ -73,7 +79,6 @@ void handlePairingModeEnter()
 
   if (pairingActive && deviceConnectedToBLE)
   {
-    Serial.println("Exited pairing mode");
     pairingActive = false;
   }
 }

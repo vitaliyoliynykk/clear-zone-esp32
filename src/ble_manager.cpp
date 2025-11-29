@@ -11,9 +11,11 @@
 constexpr char BT_SERVICE_ID[] = "dd8b172f-7b6d-489c-a346-5a05a6b5f5a4";
 constexpr char WIFI_NETWORKS_CHARACTERISTIC_ID[] = "f9cf5cae-146c-41dd-825d-4d9ee4e9f279";
 constexpr char WIFI_CREDS_CHARACTERISTIC_ID[] = "ba2c9d3b-9126-41a1-8cd8-54bee53e9b6b";
+constexpr char DEVICE_ID_CHARACTERISTIC[] = "caa6bfc4-2149-496d-8aa1-7e1d3945d386";
 
 BLECharacteristic *wifiNetworksCharacteristic;
 BLECharacteristic *wifiCredsCharacteristic;
+BLECharacteristic *deviceIdCharacteristic;
 
 bool deviceConnectedToBLE = false;
 
@@ -22,6 +24,17 @@ class WifiNetworksCharacteristicCallbacks : public BLECharacteristicCallbacks
   void onRead(BLECharacteristic *pCharacteristic)
   {
     scanWiFi(wifiNetworksCharacteristic);
+  }
+};
+
+class DeviceIdCharacteristicCallbacks : public BLECharacteristicCallbacks
+{
+  void onRead(BLECharacteristic *pCharacteristic)
+  {
+    std::string value = CHIP_ID.c_str();
+    
+    pCharacteristic->setValue(value);
+    pCharacteristic->notify();
   }
 };
 
@@ -82,6 +95,11 @@ void setupBLEServer()
       WIFI_CREDS_CHARACTERISTIC_ID,
       BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ);
 
+  deviceIdCharacteristic = pService->createCharacteristic(
+      DEVICE_ID_CHARACTERISTIC,
+      BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_READ);
+
+  deviceIdCharacteristic->setCallbacks(new DeviceIdCharacteristicCallbacks());
   wifiNetworksCharacteristic->setCallbacks(new WifiNetworksCharacteristicCallbacks());
   wifiCredsCharacteristic->setCallbacks(new WifiCredsCharacteristicCallbacks());
 
@@ -89,8 +107,6 @@ void setupBLEServer()
 
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(BLEUUID(BT_SERVICE_ID));
-
-  // BLEDevice::startAdvertising();
 }
 
 void toggleDeviceBLEAdvertising(bool isAdvertising)
