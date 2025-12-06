@@ -1,9 +1,9 @@
 #include <BLECharacteristic.h>
-#include "wifi_manager.h"
 #include <WiFi.h>
 #include <Preferences.h>
-
-Preferences prefs;
+#include "utils.h"
+#include "wifi_manager.h"
+#include "preferences_manager.h"
 
 void scanWiFi(BLECharacteristic *notifyNetworks)
 {
@@ -39,7 +39,7 @@ bool autoconnectToWifi()
     std::string ssid;
     std::string pass;
 
-    if (loadCreds(ssid, pass))
+    if (loadWifiCreds(ssid, pass))
     {
         WiFi.begin(ssid.c_str(), pass.c_str());
 
@@ -68,36 +68,8 @@ wl_status_t connectToWifi(std::string ssid, std::string pass)
 
     if (res == WL_CONNECTED)
     {
-        saveCreds(ssid, pass);
+        saveWifiCreds(ssid, pass);
     }
 
     return res;
-}
-
-void saveCreds(const std::string &ssid, const std::string &pass)
-{
-    prefs.begin("wifi", false);
-
-    prefs.putString("ssid", ssid.c_str());
-    prefs.putString("pass", pass.c_str());
-
-    prefs.end();
-}
-
-bool loadCreds(std::string &ssid, std::string &pass)
-{
-    prefs.begin("wifi", true);
-
-    String s = prefs.getString("ssid", "");
-    String p = prefs.getString("pass", "");
-
-    prefs.end();
-
-    if (s.isEmpty() || p.isEmpty())
-        return false;
-
-    ssid.assign(s.c_str());
-    pass.assign(p.c_str());
-
-    return true;
 }

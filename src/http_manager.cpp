@@ -1,11 +1,17 @@
-#include "http_manager.h"
+
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <ArduinoJson.h>
+#include <Preferences.h>
 #include "utils.h"
+#include "http_manager.h"
 
-const char *API_URL = "https://wake-wishes-guest-parent.trycloudflare.com";
+const char *API_URL = "https://reason-moses-profiles-placing.trycloudflare.com";
+
+// Preferences prefs;
 
 String apiPath(String path);
+void handleRegistrationResponse(const String &response);
 
 void registerHttpsRequest()
 {
@@ -31,14 +37,44 @@ void registerHttpsRequest()
     if (httpCode > 0)
     {
         String response = http.getString();
-        Serial.println("Response:");
-        Serial.println(response);
+        handleRegistrationResponse(response);
     }
 
     http.end();
 }
 
+// bool checkModuleRegistrationRequest()
+// {
+//     WiFiClientSecure client;
+//     client.setInsecure();
+
+//     HTTPClient http;
+
+//     if (!http.begin(client, apiPath("/module-auth/me")))
+//     {
+//         Serial.println("HTTP begin failed");
+//         return false;
+//     }
+// }
+
 String apiPath(String path)
 {
     return String(API_URL) + path;
+}
+
+void handleRegistrationResponse(const String &response)
+{
+    JsonDocument doc;
+    deserializeJson(doc, response);
+
+    const char *moduleToken = doc["moduleToken"];
+    const char *mqttUsername = doc["mqttUsername"];
+    const char *mqttPass = doc["mqttPass"];
+
+    // prefs.begin(PREF_AUTH_KEY, true);
+
+    // prefs.putString("moduleToken", moduleToken);
+    // prefs.putString("mqttUsername", mqttUsername);
+    // prefs.putString("mqttPass", mqttPass);
+    // prefs.end();
 }
