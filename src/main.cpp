@@ -12,6 +12,7 @@ static bool pairingActive = false;
 volatile uint32_t bootPressStart = 0;
 
 void handlePairingModeEnter();
+void handleAuthInitialization();
 
 void IRAM_ATTR onBootPressed()
 {
@@ -21,7 +22,6 @@ void IRAM_ATTR onBootPressed()
   {
     bootPressed = true;
     bootPressStart = millis();
-    Serial.println("Boot pressed");
   }
   else
   {
@@ -44,14 +44,7 @@ void setup()
 
   if (isConnected)
   {
-    if (hasToken())
-    {
-      // verify
-    }
-    else
-    {
-      registerHttpsRequest();
-    }
+    handleAuthInitialization();
   }
 
   setupBLEServer();
@@ -89,5 +82,28 @@ void handlePairingModeEnter()
   if (pairingActive && deviceConnectedToBLE)
   {
     pairingActive = false;
+  }
+}
+
+void handleAuthInitialization()
+{
+  std::string moduleToken;
+
+  Serial.println("Checking for registration...");
+
+  if (loadModuleToken(moduleToken) &&
+      checkModuleRegistrationRequest(moduleToken))
+  {
+    Serial.println("Device has already been registered");
+    Serial.println("Doing stuff");
+    return;
+  }
+
+  Serial.println("Trying to register...");
+
+  if (registerHttpsRequest())
+  {
+    Serial.println("Device is registered");
+    Serial.println("Doing stuff");
   }
 }

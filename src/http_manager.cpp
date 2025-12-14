@@ -2,18 +2,16 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
-#include <Preferences.h>
 #include "utils.h"
 #include "http_manager.h"
+#include "preferences_manager.h"
 
-const char *API_URL = "https://reason-moses-profiles-placing.trycloudflare.com";
-
-// Preferences prefs;
+const char *API_URL = "https://stripes-barrier-investments-treated.trycloudflare.com";
 
 String apiPath(String path);
 void handleRegistrationResponse(const String &response);
 
-void registerHttpsRequest()
+bool registerHttpsRequest()
 {
     WiFiClientSecure client;
     client.setInsecure();
@@ -23,7 +21,7 @@ void registerHttpsRequest()
     if (!http.begin(client, apiPath("/module-auth/register-module")))
     {
         Serial.println("HTTP begin failed");
-        return;
+        return false;
     }
 
     http.addHeader("Content-Type", "application/json");
@@ -34,28 +32,42 @@ void registerHttpsRequest()
 
     Serial.printf("HTTP POST code: %d\n", httpCode);
 
-    if (httpCode > 0)
+    if (httpCode == 200)
     {
         String response = http.getString();
         handleRegistrationResponse(response);
+
+        return true;
     }
 
     http.end();
+
+    return false;
 }
 
-// bool checkModuleRegistrationRequest()
-// {
-//     WiFiClientSecure client;
-//     client.setInsecure();
+bool checkModuleRegistrationRequest(std::string moduleToken)
+{
+    WiFiClientSecure client;
+    client.setInsecure();
 
-//     HTTPClient http;
+    HTTPClient http;
 
-//     if (!http.begin(client, apiPath("/module-auth/me")))
-//     {
-//         Serial.println("HTTP begin failed");
-//         return false;
-//     }
-// }
+    if (!http.begin(client, apiPath("/module-auth/me")))
+    {
+        Serial.println("HTTP begin failed");
+        return false;
+    }
+
+    http.addHeader("Content-Type", "application/json");
+
+    String payload = "{\"deviceId\":\"" + CHIP_ID + "\",\"moduleToken\":\"" + moduleToken.c_str() + "\"}";
+
+    int httpCode = http.POST(payload);
+
+    http.end();
+
+    return httpCode == 200;
+}
 
 String apiPath(String path)
 {
@@ -71,10 +83,5 @@ void handleRegistrationResponse(const String &response)
     const char *mqttUsername = doc["mqttUsername"];
     const char *mqttPass = doc["mqttPass"];
 
-    // prefs.begin(PREF_AUTH_KEY, true);
-
-    // prefs.putString("moduleToken", moduleToken);
-    // prefs.putString("mqttUsername", mqttUsername);
-    // prefs.putString("mqttPass", mqttPass);
-    // prefs.end();
+    saveModuleCreds(moduleToken, mqttUsername, mqttPass);
 }

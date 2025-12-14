@@ -17,6 +17,23 @@ bool hasToken()
     return true;
 }
 
+bool loadModuleToken(std::string &moduleToken)
+{
+    Serial.println(PREF_AUTH_KEY);
+    prefs.begin(PREF_AUTH_KEY, true);
+
+    String token = prefs.getString("moduleToken", "");
+
+    prefs.end();
+
+    if (token.isEmpty())
+        return false;
+
+    moduleToken.assign(token.c_str());
+    
+    return true;
+}
+
 void saveWifiCreds(const std::string &ssid, const std::string &pass)
 {
     prefs.begin(PREF_WIFI_KEY, false);
@@ -43,4 +60,15 @@ bool loadWifiCreds(std::string &ssid, std::string &pass)
     pass.assign(p.c_str());
 
     return true;
+}
+
+void saveModuleCreds(const char *moduleToken, const char *mqttUsername, const char *mqttPass)
+{
+    prefs.begin(PREF_AUTH_KEY, false);
+
+    prefs.putString("moduleToken", moduleToken);
+    prefs.putString("mqttUsername", mqttUsername);
+    prefs.putString("mqttPass", mqttPass);
+
+    prefs.end();
 }

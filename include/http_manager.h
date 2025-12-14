@@ -2,4 +2,5 @@
 
 extern const char* API_URL;
 
-void registerHttpsRequest();
+bool registerHttpsRequest();
+bool checkModuleRegistrationRequest(std::string moduleToken);
