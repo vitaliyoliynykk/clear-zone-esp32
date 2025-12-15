@@ -8,6 +8,7 @@
 
 extern BLECharacteristic *wifiNetworksCharacteristic;
 extern BLECharacteristic *wifiCredsCharacteristic;
+extern BLECharacteristic *statusCharacteristic;
 extern bool deviceConnectedToBLE;
 
 void setupBLEServer();

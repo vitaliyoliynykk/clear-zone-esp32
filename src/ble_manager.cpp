@@ -4,18 +4,24 @@
 #include <BLEUtils.h>
 #include <BLEAdvertising.h>
 #include <BLESecurity.h>
+#include <BLE2902.h>
 #include "ble_manager.h"
 #include "wifi_manager.h"
+#include "http_manager.h"
 #include "utils.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 
 constexpr char BT_SERVICE_ID[] = "dd8b172f-7b6d-489c-a346-5a05a6b5f5a4";
 constexpr char WIFI_NETWORKS_CHARACTERISTIC_ID[] = "f9cf5cae-146c-41dd-825d-4d9ee4e9f279";
 constexpr char WIFI_CREDS_CHARACTERISTIC_ID[] = "ba2c9d3b-9126-41a1-8cd8-54bee53e9b6b";
 constexpr char DEVICE_ID_CHARACTERISTIC[] = "caa6bfc4-2149-496d-8aa1-7e1d3945d386";
+constexpr char STATUS_CHARACTERISTIC_ID[] = "6e8327de-10cb-41ec-a222-8f472c83fc80";
 
 BLECharacteristic *wifiNetworksCharacteristic;
 BLECharacteristic *wifiCredsCharacteristic;
 BLECharacteristic *deviceIdCharacteristic;
+BLECharacteristic *statusCharacteristic;
 
 bool deviceConnectedToBLE = false;
 
@@ -32,7 +38,7 @@ class DeviceIdCharacteristicCallbacks : public BLECharacteristicCallbacks
   void onRead(BLECharacteristic *pCharacteristic)
   {
     std::string value = CHIP_ID.c_str();
-    
+
     pCharacteristic->setValue(value);
     pCharacteristic->notify();
   }
@@ -50,13 +56,19 @@ class WifiCredsCharacteristicCallbacks : public BLECharacteristicCallbacks
 
     wl_status_t res = connectToWifi(ssid, pass);
 
+    pCharacteristic->setValue(std::to_string(res));
+    pCharacteristic->notify();
+
     if (res == WL_CONNECTED)
     {
       toggleDeviceBLEAdvertising(false);
-    }
+      uint8_t msg = 1;
+      xQueueSend(authQueue, &msg, 0); // тільки сигнал, без блокування BLE
 
-    pCharacteristic->setValue(std::to_string(res));
-    pCharacteristic->notify();
+      // int result = handleAuthInitialization();
+      // statusCharacteristic->setValue(result == 200 ? "REGISTERED" : "REGISTRATION_ERROR");
+      // statusCharacteristic->notify();
+    }
   }
 };
 
@@ -99,9 +111,15 @@ void setupBLEServer()
       DEVICE_ID_CHARACTERISTIC,
       BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_READ);
 
+  statusCharacteristic = pService->createCharacteristic(
+      STATUS_CHARACTERISTIC_ID,
+      BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_READ);
+
   deviceIdCharacteristic->setCallbacks(new DeviceIdCharacteristicCallbacks());
   wifiNetworksCharacteristic->setCallbacks(new WifiNetworksCharacteristicCallbacks());
   wifiCredsCharacteristic->setCallbacks(new WifiCredsCharacteristicCallbacks());
+
+  statusCharacteristic->addDescriptor(new BLE2902());
 
   pService->start();
 

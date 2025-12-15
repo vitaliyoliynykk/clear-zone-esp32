@@ -5,6 +5,9 @@
 #include "ble_manager.h"
 #include "http_manager.h"
 #include "preferences_manager.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
 
 constexpr uint32_t PAIRING_HOLD_MS = 5000;
 volatile bool bootPressed = false;
@@ -12,7 +15,7 @@ static bool pairingActive = false;
 volatile uint32_t bootPressStart = 0;
 
 void handlePairingModeEnter();
-void handleAuthInitialization();
+void AuthTask(void *param);
 
 void IRAM_ATTR onBootPressed()
 {
@@ -33,6 +36,9 @@ void setup()
 {
   Serial.begin(9600);
   Serial.printf("Starting Clear Zone Module [ID]: %s \n", CHIP_ID);
+
+  authQueue = xQueueCreate(1, sizeof(uint8_t));
+  xTaskCreatePinnedToCore(AuthTask, "AuthTask", 4096, nullptr, 1, nullptr, 1); // ядро 1, стек підійміть за потреби
 
   pinMode(BT_LED_PIN, OUTPUT);
   pinMode(BOOT_PIN, INPUT_PULLUP);
@@ -85,25 +91,18 @@ void handlePairingModeEnter()
   }
 }
 
-void handleAuthInitialization()
+void AuthTask(void *param)
 {
-  std::string moduleToken;
-
-  Serial.println("Checking for registration...");
-
-  if (loadModuleToken(moduleToken) &&
-      checkModuleRegistrationRequest(moduleToken))
+  uint8_t msg;
+  for (;;)
   {
-    Serial.println("Device has already been registered");
-    Serial.println("Doing stuff");
-    return;
-  }
-
-  Serial.println("Trying to register...");
-
-  if (registerHttpsRequest())
-  {
-    Serial.println("Device is registered");
-    Serial.println("Doing stuff");
+    if (xQueueReceive(authQueue, &msg, portMAX_DELAY) == pdTRUE)
+    {
+      int result = handleAuthInitialization();
+      Serial.println("Updated from task:");
+      Serial.println(result);
+      // // оновлення BLE статусу через функцію/глобал
+      // setStatusFromAuth(result); // створіть хелпер, що робить setValue/notify
+    }
   }
 }

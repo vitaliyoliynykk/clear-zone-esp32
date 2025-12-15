@@ -6,7 +6,7 @@
 #include "http_manager.h"
 #include "preferences_manager.h"
 
-const char *API_URL = "https://stripes-barrier-investments-treated.trycloudflare.com";
+const char *API_URL = "https://cents-produce-cultural-anti.trycloudflare.com";
 
 String apiPath(String path);
 void handleRegistrationResponse(const String &response);
@@ -36,6 +36,8 @@ bool registerHttpsRequest()
     {
         String response = http.getString();
         handleRegistrationResponse(response);
+
+        http.end();
 
         return true;
     }
@@ -84,4 +86,30 @@ void handleRegistrationResponse(const String &response)
     const char *mqttPass = doc["mqttPass"];
 
     saveModuleCreds(moduleToken, mqttUsername, mqttPass);
+}
+
+int handleAuthInitialization()
+{
+    std::string moduleToken;
+    Serial.println("Checking for registration...");
+
+    if (loadModuleToken(moduleToken) &&
+        checkModuleRegistrationRequest(moduleToken))
+    {
+        Serial.println("Device has already been registered");
+        Serial.println("Doing stuff");
+        return 200;
+    }
+
+    Serial.println("Trying to register...");
+
+    if (registerHttpsRequest())
+    {
+        Serial.println("Device is registered");
+        Serial.println("Doing stuff");
+
+        return 200;
+    }
+
+    return 400;
 }

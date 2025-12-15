@@ -4,6 +4,8 @@
 #include "utils.h"
 
 String CHIP_ID = String((uint32_t)ESP.getEfuseMac(), HEX);
+QueueHandle_t authQueue;
+
 const char PROVISION_SECRET[] = "clear-zone-device-sc-dd8b172f-7b6d-489c-a346-5a05a6b5f5a4";
 const char PREF_WIFI_KEY[] = "wifi-creds";
 const char PREF_AUTH_KEY[] = "auth-creds";
