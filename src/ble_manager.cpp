@@ -131,3 +131,9 @@ void toggleDeviceBLEAdvertising(bool isAdvertising)
     NimBLEDevice::stopAdvertising();
   }
 }
+
+void sendAuthResult(uint8_t result)
+{
+  statusCharacteristic->setValue(result == 200 ? "REGISTERED" : "REGISTRATION_ERROR");
+  statusCharacteristic->notify();
+}

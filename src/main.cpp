@@ -98,9 +98,8 @@ void AuthTask(void *param)
   {
     if (xQueueReceive(authQueue, &msg, portMAX_DELAY) == pdTRUE)
     {
-      int result = handleAuthInitialization();
-      Serial.println("Updated from task:");
-      Serial.println(result);
+      uint8_t result = handleAuthInitialization();
+      sendAuthResult(result);
     }
   }
 }

@@ -88,25 +88,19 @@ void handleRegistrationResponse(const String &response)
     saveModuleCreds(moduleToken, mqttUsername, mqttPass);
 }
 
-int handleAuthInitialization()
+uint8_t handleAuthInitialization()
 {
     std::string moduleToken;
-    Serial.println("Checking for registration...");
 
     if (loadModuleToken(moduleToken) &&
         checkModuleRegistrationRequest(moduleToken))
     {
-        Serial.println("Device has already been registered");
-        Serial.println("Doing stuff");
+
         return 200;
     }
 
-    Serial.println("Trying to register...");
-
     if (registerHttpsRequest())
     {
-        Serial.println("Device is registered");
-        Serial.println("Doing stuff");
 
         return 200;
     }
