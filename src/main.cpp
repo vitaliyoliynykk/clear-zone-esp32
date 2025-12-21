@@ -38,7 +38,7 @@ void setup()
   Serial.printf("Starting Clear Zone Module [ID]: %s \n", CHIP_ID);
 
   authQueue = xQueueCreate(1, sizeof(uint8_t));
-  xTaskCreatePinnedToCore(AuthTask, "AuthTask", 4096, nullptr, 1, nullptr, 1); // ядро 1, стек підійміть за потреби
+  xTaskCreatePinnedToCore(AuthTask, "AuthTask", 8192, nullptr, 1, nullptr, 1);
 
   pinMode(BT_LED_PIN, OUTPUT);
   pinMode(BOOT_PIN, INPUT_PULLUP);
@@ -101,8 +101,6 @@ void AuthTask(void *param)
       int result = handleAuthInitialization();
       Serial.println("Updated from task:");
       Serial.println(result);
-      // // оновлення BLE статусу через функцію/глобал
-      // setStatusFromAuth(result); // створіть хелпер, що робить setValue/notify
     }
   }
 }

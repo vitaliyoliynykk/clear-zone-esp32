@@ -1,11 +1,11 @@
-#include <BLECharacteristic.h>
+#include <NimBLECharacteristic.h>
 #include <WiFi.h>
 #include <Preferences.h>
 #include "utils.h"
 #include "wifi_manager.h"
 #include "preferences_manager.h"
 
-void scanWiFi(BLECharacteristic *notifyNetworks)
+void scanWiFi(NimBLECharacteristic *notifyNetworks)
 {
     WiFi.disconnect();
     delay(100);

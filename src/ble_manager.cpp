@@ -1,10 +1,5 @@
 #include <Arduino.h>
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-#include <BLEAdvertising.h>
-#include <BLESecurity.h>
-#include <BLE2902.h>
+#include <NimBLEDevice.h>
 #include "ble_manager.h"
 #include "wifi_manager.h"
 #include "http_manager.h"
@@ -18,24 +13,24 @@ constexpr char WIFI_CREDS_CHARACTERISTIC_ID[] = "ba2c9d3b-9126-41a1-8cd8-54bee53
 constexpr char DEVICE_ID_CHARACTERISTIC[] = "caa6bfc4-2149-496d-8aa1-7e1d3945d386";
 constexpr char STATUS_CHARACTERISTIC_ID[] = "6e8327de-10cb-41ec-a222-8f472c83fc80";
 
-BLECharacteristic *wifiNetworksCharacteristic;
-BLECharacteristic *wifiCredsCharacteristic;
-BLECharacteristic *deviceIdCharacteristic;
-BLECharacteristic *statusCharacteristic;
+NimBLECharacteristic *wifiNetworksCharacteristic;
+NimBLECharacteristic *wifiCredsCharacteristic;
+NimBLECharacteristic *deviceIdCharacteristic;
+NimBLECharacteristic *statusCharacteristic;
 
 bool deviceConnectedToBLE = false;
 
-class WifiNetworksCharacteristicCallbacks : public BLECharacteristicCallbacks
+class WifiNetworksCharacteristicCallbacks : public NimBLECharacteristicCallbacks
 {
-  void onRead(BLECharacteristic *pCharacteristic)
+  void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
   {
     scanWiFi(wifiNetworksCharacteristic);
   }
 };
 
-class DeviceIdCharacteristicCallbacks : public BLECharacteristicCallbacks
+class DeviceIdCharacteristicCallbacks : public NimBLECharacteristicCallbacks
 {
-  void onRead(BLECharacteristic *pCharacteristic)
+  void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
   {
     std::string value = CHIP_ID.c_str();
 
@@ -44,9 +39,9 @@ class DeviceIdCharacteristicCallbacks : public BLECharacteristicCallbacks
   }
 };
 
-class WifiCredsCharacteristicCallbacks : public BLECharacteristicCallbacks
+class WifiCredsCharacteristicCallbacks : public NimBLECharacteristicCallbacks
 {
-  void onWrite(BLECharacteristic *pCharacteristic)
+  void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
   {
     std::string value = pCharacteristic->getValue();
 
@@ -63,78 +58,76 @@ class WifiCredsCharacteristicCallbacks : public BLECharacteristicCallbacks
     {
       toggleDeviceBLEAdvertising(false);
       uint8_t msg = 1;
-      xQueueSend(authQueue, &msg, 0); // тільки сигнал, без блокування BLE
-
-      // int result = handleAuthInitialization();
-      // statusCharacteristic->setValue(result == 200 ? "REGISTERED" : "REGISTRATION_ERROR");
-      // statusCharacteristic->notify();
+      xQueueSend(authQueue, &msg, 0);
     }
   }
 };
 
-class MyServerCallbacks : public BLEServerCallbacks
+class MyServerCallbacks : public NimBLEServerCallbacks
 {
-  void onConnect(BLEServer *pServer) override
+  void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override
   {
     deviceConnectedToBLE = true;
     digitalWrite(BT_LED_PIN, HIGH);
   }
 
-  void onDisconnect(BLEServer *pServer) override
+  void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override
   {
     deviceConnectedToBLE = false;
     digitalWrite(BT_LED_PIN, LOW);
 
-    pServer->startAdvertising();
+    NimBLEDevice::startAdvertising();
   }
 };
 
 void setupBLEServer()
 {
-  BLEDevice::init("Clear Zone Module");
-  BLEDevice::setEncryptionLevel(ESP_BLE_SEC_ENCRYPT);
+  NimBLEDevice::init("Clear Zone Module");
+  NimBLEDevice::setSecurityAuth(true, false, true);
+  NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
+  NimBLEDevice::setSecurityInitKey(BLE_SM_PAIR_KEY_DIST_ENC);
+  NimBLEDevice::setSecurityRespKey(BLE_SM_PAIR_KEY_DIST_ENC);
 
-  BLEServer *pServer = BLEDevice::createServer();
+  NimBLEServer *pServer = NimBLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
 
-  BLEService *pService = pServer->createService(BT_SERVICE_ID);
+  NimBLEService *pService = pServer->createService(BT_SERVICE_ID);
 
   wifiNetworksCharacteristic = pService->createCharacteristic(
       WIFI_NETWORKS_CHARACTERISTIC_ID,
-      BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_READ);
+      NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);
 
   wifiCredsCharacteristic = pService->createCharacteristic(
       WIFI_CREDS_CHARACTERISTIC_ID,
-      BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ);
+      NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::READ);
 
   deviceIdCharacteristic = pService->createCharacteristic(
       DEVICE_ID_CHARACTERISTIC,
-      BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_READ);
+      NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);
 
   statusCharacteristic = pService->createCharacteristic(
       STATUS_CHARACTERISTIC_ID,
-      BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_READ);
+      NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);
 
   deviceIdCharacteristic->setCallbacks(new DeviceIdCharacteristicCallbacks());
   wifiNetworksCharacteristic->setCallbacks(new WifiNetworksCharacteristicCallbacks());
   wifiCredsCharacteristic->setCallbacks(new WifiCredsCharacteristicCallbacks());
 
-  statusCharacteristic->addDescriptor(new BLE2902());
-
   pService->start();
 
-  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-  pAdvertising->addServiceUUID(BLEUUID(BT_SERVICE_ID));
+  NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(NimBLEUUID(BT_SERVICE_ID));
+  pAdvertising->enableScanResponse(true);
 }
 
 void toggleDeviceBLEAdvertising(bool isAdvertising)
 {
   if (isAdvertising)
   {
-    BLEDevice::startAdvertising();
+    NimBLEDevice::startAdvertising();
   }
   else
   {
-    BLEDevice::stopAdvertising();
+    NimBLEDevice::stopAdvertising();
   }
 }

@@ -1,14 +1,14 @@
 #pragma once
 #include <string>
 #include <iostream>
-#include <BLEServer.h>
+#include <NimBLEDevice.h>
 
 #define BT_LED_PIN 2
 #define BOOT_PIN 0
 
-extern BLECharacteristic *wifiNetworksCharacteristic;
-extern BLECharacteristic *wifiCredsCharacteristic;
-extern BLECharacteristic *statusCharacteristic;
+extern NimBLECharacteristic *wifiNetworksCharacteristic;
+extern NimBLECharacteristic *wifiCredsCharacteristic;
+extern NimBLECharacteristic *statusCharacteristic;
 extern bool deviceConnectedToBLE;
 
 void setupBLEServer();

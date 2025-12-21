@@ -6,7 +6,7 @@
 #include "http_manager.h"
 #include "preferences_manager.h"
 
-const char *API_URL = "https://cents-produce-cultural-anti.trycloudflare.com";
+const char *API_URL = "https://clear-zone-api.duckdns.org";
 
 String apiPath(String path);
 void handleRegistrationResponse(const String &response);
