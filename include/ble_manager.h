@@ -13,4 +13,4 @@ extern bool deviceConnectedToBLE;
 
 void setupBLEServer();
 void toggleDeviceBLEAdvertising(bool isAdvertising);
-void sendAuthResult(uint8_t result);
+void sendAuthResult(bool result);

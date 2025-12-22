@@ -17,3 +17,16 @@ std::pair<std::string, std::string> splitStr(const std::string &in, char sep)
     return {"", ""};
   return {in.substr(0, pos), in.substr(pos + 1)};
 }
+
+bool ensureTimeSynced(unsigned long timeoutMs = 10000)
+{
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  unsigned long start = millis();
+  time_t now;
+  do
+  {
+    delay(200);
+    now = time(nullptr);
+  } while ((now < 1672531200 /* 2023-01-01 */) && (millis() - start < timeoutMs));
+  return now >= 1672531200;
+}

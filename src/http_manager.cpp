@@ -4,6 +4,7 @@
 #include <ArduinoJson.h>
 #include "utils.h"
 #include "http_manager.h"
+#include "wifi_manager.h"
 #include "preferences_manager.h"
 
 const char *API_URL = "https://clear-zone-api.duckdns.org";
@@ -13,12 +14,12 @@ void handleRegistrationResponse(const String &response);
 
 bool registerHttpsRequest()
 {
-    WiFiClientSecure client;
-    client.setInsecure();
+    // WiFiClientSecure client;
+    // client.setInsecure();
 
     HTTPClient http;
 
-    if (!http.begin(client, apiPath("/module-auth/register-module")))
+    if (!http.begin(wifiClient, apiPath("/module-auth/register-module")))
     {
         Serial.println("HTTP begin failed");
         return false;
@@ -49,12 +50,12 @@ bool registerHttpsRequest()
 
 bool checkModuleRegistrationRequest(std::string moduleToken)
 {
-    WiFiClientSecure client;
-    client.setInsecure();
+    // WiFiClientSecure client;
+    // client.setInsecure();
 
     HTTPClient http;
 
-    if (!http.begin(client, apiPath("/module-auth/me")))
+    if (!http.begin(wifiClient, apiPath("/module-auth/me")))
     {
         Serial.println("HTTP begin failed");
         return false;
@@ -88,22 +89,23 @@ void handleRegistrationResponse(const String &response)
     saveModuleCreds(moduleToken, mqttUsername, mqttPass);
 }
 
-uint8_t handleAuthInitialization()
+bool handleAuthInitialization()
 {
     std::string moduleToken;
+    Serial.println("Checking registration");
 
     if (loadModuleToken(moduleToken) &&
         checkModuleRegistrationRequest(moduleToken))
     {
-
-        return 200;
+        Serial.println("Ok");
+        return true;
     }
-
+    Serial.println("Registering");
     if (registerHttpsRequest())
     {
-
-        return 200;
+        Serial.println("Registered");
+        return true;
     }
 
-    return 400;
+    return false;
 }

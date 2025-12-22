@@ -132,8 +132,8 @@ void toggleDeviceBLEAdvertising(bool isAdvertising)
   }
 }
 
-void sendAuthResult(uint8_t result)
+void sendAuthResult(bool result)
 {
-  statusCharacteristic->setValue(result == 200 ? "REGISTERED" : "REGISTRATION_ERROR");
+  statusCharacteristic->setValue(result ? "REGISTERED" : "REGISTRATION_ERROR");
   statusCharacteristic->notify();
 }

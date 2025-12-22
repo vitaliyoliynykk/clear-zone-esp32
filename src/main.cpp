@@ -5,6 +5,7 @@
 #include "ble_manager.h"
 #include "http_manager.h"
 #include "preferences_manager.h"
+#include "mqtt_setup.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -50,7 +51,11 @@ void setup()
 
   if (isConnected)
   {
-    handleAuthInitialization();
+    setupWifiClient();
+    if (handleAuthInitialization())
+    {
+      mqttConnect();
+    }
   }
 
   setupBLEServer();
@@ -98,7 +103,7 @@ void AuthTask(void *param)
   {
     if (xQueueReceive(authQueue, &msg, portMAX_DELAY) == pdTRUE)
     {
-      uint8_t result = handleAuthInitialization();
+      bool result = handleAuthInitialization();
       sendAuthResult(result);
     }
   }

@@ -19,7 +19,6 @@ bool hasToken()
 
 bool loadModuleToken(std::string &moduleToken)
 {
-    Serial.println(PREF_AUTH_KEY);
     prefs.begin(PREF_AUTH_KEY, true);
 
     String token = prefs.getString("moduleToken", "");
@@ -30,7 +29,7 @@ bool loadModuleToken(std::string &moduleToken)
         return false;
 
     moduleToken.assign(token.c_str());
-    
+
     return true;
 }
 
@@ -71,4 +70,22 @@ void saveModuleCreds(const char *moduleToken, const char *mqttUsername, const ch
     prefs.putString("mqttPass", mqttPass);
 
     prefs.end();
+}
+
+bool loadMqttCreds(std::string &mqttUsername, std::string &mqttPass)
+{
+    prefs.begin(PREF_AUTH_KEY, true);
+
+    String username = prefs.getString("mqttUsername", "");
+    String password = prefs.getString("mqttPass", "");
+
+    prefs.end();
+
+    if (username.isEmpty() || password.isEmpty())
+        return false;
+
+    mqttUsername.assign(username.c_str());
+    mqttPass.assign(password.c_str());
+
+    return true;
 }
