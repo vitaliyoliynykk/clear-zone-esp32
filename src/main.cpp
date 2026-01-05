@@ -51,6 +51,7 @@ void setup()
 
   if (isConnected)
   {
+    delay(2000); // Wait for DNS
     setupWifiClient();
     if (handleAuthInitialization())
     {
@@ -63,8 +64,9 @@ void setup()
 
 void loop()
 {
+  mqtt.loop();
   handlePairingModeEnter();
-  delay(10);
+  delay(50);
 }
 
 void handlePairingModeEnter()

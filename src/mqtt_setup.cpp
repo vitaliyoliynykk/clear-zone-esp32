@@ -9,6 +9,8 @@
 const char *MQTT_HOST = "0a485ffbbe9140d2b244b49d6c3ef435.s1.eu.hivemq.cloud";
 const uint16_t MQTT_PORT = 8883;
 
+String statusTopic = "devices/" + CHIP_ID + "/status";
+
 PubSubClient mqtt(wifiClient);
 
 void onMqttMessage(char *topic, byte *payload, unsigned int len)
@@ -28,24 +30,20 @@ bool mqttConnect()
     {
         mqtt.setServer(MQTT_HOST, MQTT_PORT);
         mqtt.setCallback(onMqttMessage);
+        mqtt.setKeepAlive(5);
 
-        String clientId = "esp32-" + CHIP_ID;
-        String pubTopic = "devices/" + CHIP_ID + "/hello";
-        String subTopic = "devices/" + CHIP_ID + "/cmd";
+        const char *willPayload = "{\"status\":\"offline\"}";
 
         Serial.printf("[MQTT] Connecting to %s ...\n", MQTT_HOST);
-        if (!mqtt.connect(clientId.c_str(), MQTT_USER.c_str(), MQTT_PASS.c_str()))
+        if (!mqtt.connect(CHIP_ID.c_str(), MQTT_USER.c_str(), MQTT_PASS.c_str(), statusTopic.c_str(), 1, true, willPayload))
         {
             Serial.printf("[MQTT] Connect failed, state=%d\n", mqtt.state());
             return false;
         }
+
+        mqtt.publish(statusTopic.c_str(), "{\"status\":\"online\"}");
         Serial.println("[MQTT] Connected!");
 
-        mqtt.subscribe(subTopic.c_str(), 1);
-
-        String payload = String("{\"msg\":\"hello from ESP32\",\"chip\":\"") + CHIP_ID + "\"}";
-        mqtt.publish(pubTopic.c_str(), payload.c_str(), true); // retain=true для зручності
-        Serial.printf("[MQTT] Published to %s: %s\n", pubTopic.c_str(), payload.c_str());
         return true;
     }
 

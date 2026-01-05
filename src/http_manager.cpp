@@ -1,5 +1,4 @@
 
-#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include "utils.h"
@@ -14,9 +13,6 @@ void handleRegistrationResponse(const String &response);
 
 bool registerHttpsRequest()
 {
-    // WiFiClientSecure client;
-    // client.setInsecure();
-
     HTTPClient http;
 
     if (!http.begin(wifiClient, apiPath("/module-auth/register-module")))
@@ -50,9 +46,6 @@ bool registerHttpsRequest()
 
 bool checkModuleRegistrationRequest(std::string moduleToken)
 {
-    // WiFiClientSecure client;
-    // client.setInsecure();
-
     HTTPClient http;
 
     if (!http.begin(wifiClient, apiPath("/module-auth/me")))
