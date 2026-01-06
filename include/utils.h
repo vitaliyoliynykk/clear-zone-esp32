@@ -4,6 +4,8 @@
 
 extern String CHIP_ID;
 extern QueueHandle_t authQueue;
+extern QueueHandle_t sensorsQueue;
+extern QueueHandle_t sht31Queue;
 
 extern const char PROVISION_SECRET[];
 extern const char PREF_WIFI_KEY[];
