@@ -8,6 +8,7 @@
 #include "preferences_manager.h"
 #include "mqtt_setup.h"
 #include "SHT31.h"
+#include "SCD41.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -54,12 +55,14 @@ void setup()
 
   // Sensors
   initSht31();
+  initCOSensor();
 
   // FreeRTOS
   authQueue = xQueueCreate(1, sizeof(uint8_t));
-  sensorsQueue = xQueueCreate(1, sizeof(uint8_t));
+  enableSensorsQueue = xQueueCreate(1, sizeof(uint8_t));
   sht31Queue = xQueueCreate(4,
                             sizeof(std::array<float, 2>));
+  co2Queue = xQueueCreate(1, sizeof(uint16_t));
   xTaskCreatePinnedToCore(AuthTask, "AuthTask", 4096, nullptr, 1, nullptr, 1);
   xTaskCreatePinnedToCore(SensorsTask, "SensorsTask", 2048, nullptr, 1, nullptr, 1);
   xTaskCreatePinnedToCore(MqttTask, "MqttTask", 4096, nullptr, 1, nullptr, 1);
@@ -86,7 +89,7 @@ void setup()
       if (mqttConnect())
       {
         uint8_t msg = 1;
-        xQueueSend(sensorsQueue, &msg, 0);
+        xQueueSend(enableSensorsQueue, &msg, 0);
       }
     }
   }
@@ -147,15 +150,17 @@ void SensorsTask(void *param)
 {
   uint8_t msg;
 
-  if (xQueueReceive(sensorsQueue, &msg, portMAX_DELAY) == pdTRUE)
+  if (xQueueReceive(enableSensorsQueue, &msg, portMAX_DELAY) == pdTRUE)
   {
     for (;;)
     {
-      auto data = mesureSht31();
+      auto sht31Reading = mesureSht31();
+      uint16_t co2Reading = readCO2();
 
-      xQueueSend(sht31Queue, &data, 0);
+      xQueueSend(sht31Queue, &sht31Reading, 0);
+      xQueueSend(co2Queue, &co2Reading, 0);
 
-      vTaskDelay(pdMS_TO_TICKS(60000));
+      vTaskDelay(pdMS_TO_TICKS(15000));
     }
   }
 }
@@ -163,6 +168,7 @@ void SensorsTask(void *param)
 void MqttTask(void *param)
 {
   std::array<float, 2> msg;
+  uint16_t co2Reding;
   char payload[64];
 
   for (;;)
@@ -177,6 +183,18 @@ void MqttTask(void *param)
           msg[1]);
 
       mqtt.publish(tempTopic.c_str(), payload);
+    }
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    if (xQueueReceive(co2Queue, &co2Reding, portMAX_DELAY))
+    {
+      snprintf(
+          payload,
+          sizeof(payload),
+          "{\"co2\":%d}",
+          co2Reding);
+
+      mqtt.publish(co2Topic.c_str(), payload);
     }
     vTaskDelay(pdMS_TO_TICKS(100));
   }

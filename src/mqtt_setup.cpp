@@ -9,8 +9,10 @@
 const char *MQTT_HOST = "0a485ffbbe9140d2b244b49d6c3ef435.s1.eu.hivemq.cloud";
 const uint16_t MQTT_PORT = 8883;
 
-String statusTopic = "devices/" + CHIP_ID + "/status";
-String tempTopic = "devices/" + CHIP_ID + "/temp";
+String topic = "devices/" + CHIP_ID;
+String statusTopic = topic + "/status";
+String tempTopic = topic + "/temp";
+String co2Topic = topic + "/co2";
 
 PubSubClient mqtt(wifiClient);
 
