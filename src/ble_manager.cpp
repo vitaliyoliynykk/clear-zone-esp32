@@ -4,6 +4,7 @@
 #include "wifi_manager.h"
 #include "http_manager.h"
 #include "utils.h"
+#include "tasks.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 
