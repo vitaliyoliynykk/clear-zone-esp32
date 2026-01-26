@@ -9,6 +9,7 @@
 #include "mqtt_setup.h"
 #include "SHT31.h"
 #include "SCD41.h"
+#include "BME680.h"
 #include "tasks.h"
 #include <array>
 

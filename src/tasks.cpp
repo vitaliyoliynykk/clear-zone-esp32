@@ -53,7 +53,6 @@ void AuthTask(void *param)
     {
         if (xQueueReceive(authQueue, &msg, portMAX_DELAY) == pdTRUE)
         {
-            Serial.println("QUEUE RECEIVE");
             bool result = handleAuthInitialization();
             sendAuthResult(result);
         }
@@ -83,7 +82,6 @@ void MqttTask(void *param)
                     msg[1]);
 
                 mqtt.publish(tempTopic.c_str(), payload);
-                Serial.println("TEMP Published");
             }
         }
         else if (activated == co2Queue)
@@ -99,7 +97,6 @@ void MqttTask(void *param)
                     co2Reding);
 
                 mqtt.publish(co2Topic.c_str(), payload);
-                Serial.println("CO2 Published");
             }
         }
 
