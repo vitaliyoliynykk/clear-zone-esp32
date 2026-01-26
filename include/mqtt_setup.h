@@ -5,5 +5,6 @@
 extern PubSubClient mqtt;
 extern String tempTopic;
 extern String co2Topic;
+extern String pmsTopic;
 
 bool mqttConnect();

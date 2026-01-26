@@ -13,6 +13,7 @@ String topic = "devices/" + CHIP_ID;
 String statusTopic = topic + "/status";
 String tempTopic = topic + "/temp";
 String co2Topic = topic + "/co2";
+String pmsTopic = topic + "/pms";
 
 PubSubClient mqtt(wifiClient);
 

@@ -10,6 +10,7 @@
 #include "SHT31.h"
 #include "SCD41.h"
 #include "BME680.h"
+#include "PMS5003.h"
 #include "tasks.h"
 #include <array>
 
@@ -43,9 +44,13 @@ void setup()
   // I2C Init
   Wire.begin(21, 22); // SDA, SCL
 
+  // Wait for sensors to turn on
+  delay(1000);
+
   // Sensors
   initSht31();
   initCOSensor();
+  initPMS();
 
   // FreeRTOS
   initRTOS();
