@@ -78,6 +78,7 @@ void setup()
       {
         uint8_t msg = 1;
         xQueueSend(enableSensorsQueue, &msg, 0);
+        xQueueSend(enablePmsPollingQueue, &msg, 0);
       }
     }
   }

@@ -13,9 +13,11 @@
 #include <array>
 
 const uint16_t READING_INTERVAL = 60000;
+const uint16_t PMS_POLLING_INTERVAL = 1000;
 
 const uint8_t AUTH_QUEUE_LEN = 1;
 const uint8_t SENSORS_QUEUE_LEN = 1;
+const uint8_t PMS_POLLING_QUEUE_LEN = 1;
 const uint8_t SHT31_QUEUE_LEN = 4;
 const uint8_t C02_QUEUE_LEN = 1;
 const uint8_t PMS_QUEUE_LEN = 4;
@@ -23,6 +25,7 @@ const uint8_t QUEUE_SET_LEN = SHT31_QUEUE_LEN + C02_QUEUE_LEN + PMS_QUEUE_LEN;
 
 QueueHandle_t authQueue;
 QueueHandle_t enableSensorsQueue;
+QueueHandle_t enablePmsPollingQueue;
 QueueHandle_t sht31Queue;
 QueueHandle_t pmsQueue;
 QueueHandle_t co2Queue;
@@ -32,11 +35,13 @@ QueueSetHandle_t sensorQueueSet = xQueueCreateSet(QUEUE_SET_LEN);
 void MqttTask(void *param);
 void AuthTask(void *param);
 void SensorsTask(void *param);
+void PmsPollingTask(void *param);
 
 void initRTOS()
 {
     authQueue = xQueueCreate(AUTH_QUEUE_LEN, sizeof(uint8_t));
     enableSensorsQueue = xQueueCreate(SENSORS_QUEUE_LEN, sizeof(uint8_t));
+    enablePmsPollingQueue = xQueueCreate(PMS_POLLING_QUEUE_LEN, sizeof(uint8_t));
     sht31Queue = xQueueCreate(SHT31_QUEUE_LEN,
                               sizeof(std::array<float, 2>));
     pmsQueue = xQueueCreate(PMS_QUEUE_LEN,
@@ -50,6 +55,7 @@ void initRTOS()
     xTaskCreatePinnedToCore(AuthTask, "AuthTask", 4096, nullptr, 1, nullptr, 1);
     xTaskCreatePinnedToCore(SensorsTask, "SensorsTask", 2048, nullptr, 1, nullptr, 1);
     xTaskCreatePinnedToCore(MqttTask, "MqttTask", 4096, nullptr, 1, nullptr, 1);
+    xTaskCreatePinnedToCore(PmsPollingTask, "PmsPollingTask", 2048, nullptr, 1, nullptr, 1);
 }
 
 void AuthTask(void *param)
@@ -134,14 +140,14 @@ void SensorsTask(void *param)
     WindowAgg pm10Agg;
     WindowAgg pm25Agg;
     WindowAgg pm100Agg;
-    unsigned long windowStart;
+    unsigned long readingWindowStart;
 
     if (xQueueReceive(enableSensorsQueue, &msg, portMAX_DELAY) == pdTRUE)
     {
-        windowStart = millis();
+        readingWindowStart = millis();
         for (;;)
         {
-            if (millis() - windowStart >= READING_INTERVAL)
+            if (millis() - readingWindowStart >= READING_INTERVAL)
             {
                 float co2Avg = co2Agg.avg();
 
@@ -166,23 +172,38 @@ void SensorsTask(void *param)
                 pm25Agg.reset();
                 pm100Agg.reset();
 
-                windowStart = millis();
+                readingWindowStart = millis();
             }
+            std::array<uint16_t, 3> pmReading;
 
             auto sht31Reading = mesureSht31();
-            auto pmReading = readPMS();
             uint16_t co2Reading = readCO2();
+
+            if (readPMS(pmReading))
+            {
+                pm10Agg.add(pmReading[0]);
+                pm25Agg.add(pmReading[1]);
+                pm100Agg.add(pmReading[2]);
+            }
 
             tempAgg.add(sht31Reading[0]);
             humAgg.add(sht31Reading[1]);
-
-            pm10Agg.add(pmReading[0]);
-            pm25Agg.add(pmReading[1]);
-            pm100Agg.add(pmReading[2]);
-
             co2Agg.add(co2Reading);
 
             vTaskDelay(pdMS_TO_TICKS(5000));
+        }
+    }
+}
+
+void PmsPollingTask(void *param)
+{
+    uint8_t msg;
+    if (xQueueReceive(enablePmsPollingQueue, &msg, portMAX_DELAY) == pdTRUE)
+    {
+        for (;;)
+        {
+            pollPMS();
+            vTaskDelay(pdMS_TO_TICKS(250));
         }
     }
 }

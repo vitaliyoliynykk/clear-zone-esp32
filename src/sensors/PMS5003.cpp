@@ -8,29 +8,46 @@
 #define PMS_RX_PIN 16
 #define PMS_TX_PIN 17
 
+portMUX_TYPE pmsMux = portMUX_INITIALIZER_UNLOCKED;
 Adafruit_PM25AQI pm25 = Adafruit_PM25AQI();
+static PM25_AQI_Data lastData;
+static bool hasData = false;
 
-void initPMS()
+bool initPMS()
 {
     Serial2.begin(9600, SERIAL_8N1, PMS_RX_PIN, PMS_TX_PIN);
 
-    if (!pm25.begin_UART(&Serial2))
+    return pm25.begin_UART(&Serial2);
+}
+
+void pollPMS()
+{
+    PM25_AQI_Data data;
+    if (pm25.read(&data))
     {
-        Serial.println("Could not find PM 2.5 sensor!");
-        while (1)
-            delay(10);
+        portENTER_CRITICAL(&pmsMux);
+        lastData = data;
+        hasData = true;
+        portEXIT_CRITICAL(&pmsMux);
     }
 }
 
-std::array<uint16_t, 3> readPMS()
+bool readPMS(std::array<uint16_t, 3> &out)
 {
-    PM25_AQI_Data data;
-
-    if (!pm25.read(&data))
+    portENTER_CRITICAL(&pmsMux);
+    if (!hasData)
     {
-        Serial.println("Could not read from AQI");
-        return {0, 0, 0};
+        portEXIT_CRITICAL(&pmsMux);
+        return false;
     }
 
-    return {data.pm10_env, data.pm25_env, data.pm100_env};
+    out = {
+        lastData.pm10_env,
+        lastData.pm25_env,
+        lastData.pm100_env};
+
+    hasData = false;
+    portEXIT_CRITICAL(&pmsMux);
+
+    return true;
 }
