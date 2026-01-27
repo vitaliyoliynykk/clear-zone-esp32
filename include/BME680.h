@@ -1,4 +1,6 @@
 #pragma once
 
 void initBME();
-std::pair<uint32_t, float> readGas();
+bool readGas(std::pair<uint32_t, float> &out);
+uint64_t getBmeUptimeSec();
+bool getIsBMEReady();

@@ -10,6 +10,7 @@
 #include "SHT31.h"
 #include "SCD41.h"
 #include "PMS5003.h"
+#include "BME680.h"
 #include <array>
 
 const uint16_t READING_INTERVAL = 60000;
@@ -21,13 +22,15 @@ const uint8_t PMS_POLLING_QUEUE_LEN = 1;
 const uint8_t SHT31_QUEUE_LEN = 4;
 const uint8_t C02_QUEUE_LEN = 1;
 const uint8_t PMS_QUEUE_LEN = 4;
-const uint8_t QUEUE_SET_LEN = SHT31_QUEUE_LEN + C02_QUEUE_LEN + PMS_QUEUE_LEN;
+const uint8_t BME_QUEUE_LEN = 4;
+const uint8_t QUEUE_SET_LEN = SHT31_QUEUE_LEN + C02_QUEUE_LEN + PMS_QUEUE_LEN + BME_QUEUE_LEN;
 
 QueueHandle_t authQueue;
 QueueHandle_t enableSensorsQueue;
 QueueHandle_t enablePmsPollingQueue;
 QueueHandle_t sht31Queue;
 QueueHandle_t pmsQueue;
+QueueHandle_t bmeQueue;
 QueueHandle_t co2Queue;
 
 QueueSetHandle_t sensorQueueSet = xQueueCreateSet(QUEUE_SET_LEN);
@@ -47,10 +50,13 @@ void initRTOS()
     pmsQueue = xQueueCreate(PMS_QUEUE_LEN,
                             sizeof(std::array<float, 3>));
     co2Queue = xQueueCreate(C02_QUEUE_LEN, sizeof(float));
+    bmeQueue = xQueueCreate(BME_QUEUE_LEN,
+                            sizeof(std::array<float, 2>));
 
     xQueueAddToSet(sht31Queue, sensorQueueSet);
     xQueueAddToSet(co2Queue, sensorQueueSet);
     xQueueAddToSet(pmsQueue, sensorQueueSet);
+    xQueueAddToSet(bmeQueue, sensorQueueSet);
 
     xTaskCreatePinnedToCore(AuthTask, "AuthTask", 4096, nullptr, 1, nullptr, 1);
     xTaskCreatePinnedToCore(SensorsTask, "SensorsTask", 2048, nullptr, 1, nullptr, 1);
@@ -74,7 +80,7 @@ void AuthTask(void *param)
 void MqttTask(void *param)
 {
     QueueSetMemberHandle_t activated;
-    char payload[64];
+    char payload[84];
 
     for (;;)
     {
@@ -126,6 +132,21 @@ void MqttTask(void *param)
                 mqtt.publish(pmsTopic.c_str(), payload);
             }
         }
+        else if (activated == bmeQueue)
+        {
+            std::array<float, 2> bmeReading;
+
+            if (xQueueReceive(bmeQueue, &bmeReading, 0))
+            {
+                snprintf(
+                    payload,
+                    sizeof(payload),
+                    "{\"gas_resistance\":%.2f,\"sensor_humidity\":%.2f,\"uptime_seconds\":%d}",
+                    bmeReading[0], bmeReading[1], getBmeUptimeSec());
+
+                mqtt.publish(bmeTopic.c_str(), payload);
+            }
+        }
 
         vTaskDelay(pdMS_TO_TICKS(10));
     }
@@ -134,12 +155,19 @@ void MqttTask(void *param)
 void SensorsTask(void *param)
 {
     uint8_t msg;
+
     WindowAgg co2Agg;
+
     WindowAgg tempAgg;
     WindowAgg humAgg;
+
+    WindowAgg gasResistandeAgg;
+    WindowAgg gasSensorHumidityAgg;
+
     WindowAgg pm10Agg;
     WindowAgg pm25Agg;
     WindowAgg pm100Agg;
+
     unsigned long readingWindowStart;
 
     if (xQueueReceive(enableSensorsQueue, &msg, portMAX_DELAY) == pdTRUE)
@@ -158,12 +186,20 @@ void SensorsTask(void *param)
                 float pm25Avg = pm25Agg.avg();
                 float pm100Avg = pm100Agg.avg();
 
+                float gasResistanceAvg = gasResistandeAgg.avg();
+                float gasSensorHumidityAvg = gasSensorHumidityAgg.avg();
+
                 std::array<float, 2> sht31Avg = {tempAvg, humAvg};
                 std::array<float, 3> pmsAvg = {pm10Avg, pm25Avg, pm100Avg};
+                std::array<float, 2> bmeAvg = {gasResistanceAvg, gasSensorHumidityAvg};
 
                 xQueueSend(co2Queue, &co2Avg, 0);
                 xQueueSend(sht31Queue, &sht31Avg, 0);
                 xQueueSend(pmsQueue, &pmsAvg, 0);
+                if (getIsBMEReady())
+                {
+                    xQueueSend(bmeQueue, &bmeAvg, 0);
+                }
 
                 co2Agg.reset();
                 tempAgg.reset();
@@ -175,6 +211,7 @@ void SensorsTask(void *param)
                 readingWindowStart = millis();
             }
             std::array<uint16_t, 3> pmReading;
+            std::pair<uint32_t, float> bmeReading;
 
             auto sht31Reading = mesureSht31();
             uint16_t co2Reading = readCO2();
@@ -184,6 +221,15 @@ void SensorsTask(void *param)
                 pm10Agg.add(pmReading[0]);
                 pm25Agg.add(pmReading[1]);
                 pm100Agg.add(pmReading[2]);
+            }
+
+            if (getIsBMEReady() && readGas(bmeReading))
+            {
+                uint32_t gasResistance = bmeReading.first;
+                float humidity = bmeReading.second;
+
+                gasResistandeAgg.add(gasResistance);
+                gasSensorHumidityAgg.add(humidity);
             }
 
             tempAgg.add(sht31Reading[0]);

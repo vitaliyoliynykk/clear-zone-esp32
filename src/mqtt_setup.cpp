@@ -14,6 +14,7 @@ String statusTopic = topic + "/status";
 String tempTopic = topic + "/temp";
 String co2Topic = topic + "/co2";
 String pmsTopic = topic + "/pms";
+String bmeTopic = topic + "/bme";
 
 PubSubClient mqtt(wifiClient);
 

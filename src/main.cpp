@@ -50,6 +50,7 @@ void setup()
   // Sensors
   initSht31();
   initCOSensor();
+  initBME();
   initPMS();
 
   // FreeRTOS
