@@ -72,6 +72,26 @@ void saveModuleCreds(const char *moduleToken, const char *mqttUsername, const ch
     prefs.end();
 }
 
+void deletePrefs()
+{
+    prefs.begin(PREF_AUTH_KEY, false);
+
+    prefs.remove("moduleToken");
+    prefs.remove("mqttUsername");
+    prefs.remove("mqttPass");
+
+    prefs.end();
+
+    prefs.begin(PREF_WIFI_KEY, false);
+
+    prefs.remove("ssid");
+    prefs.remove("pass");
+
+    prefs.end();
+
+    Serial.println("Prefs deleted");
+}
+
 bool loadMqttCreds(std::string &mqttUsername, std::string &mqttPass)
 {
     prefs.begin(PREF_AUTH_KEY, true);

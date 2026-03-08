@@ -58,7 +58,7 @@ void initRTOS()
     xQueueAddToSet(pmsQueue, sensorQueueSet);
     xQueueAddToSet(bmeQueue, sensorQueueSet);
 
-    xTaskCreatePinnedToCore(AuthTask, "AuthTask", 4096, nullptr, 1, nullptr, 1);
+    xTaskCreatePinnedToCore(AuthTask, "AuthTask", 8192, nullptr, 1, nullptr, 1);
     xTaskCreatePinnedToCore(SensorsTask, "SensorsTask", 2048, nullptr, 1, nullptr, 1);
     xTaskCreatePinnedToCore(MqttTask, "MqttTask", 4096, nullptr, 1, nullptr, 1);
     xTaskCreatePinnedToCore(PmsPollingTask, "PmsPollingTask", 2048, nullptr, 1, nullptr, 1);
@@ -71,8 +71,15 @@ void AuthTask(void *param)
     {
         if (xQueueReceive(authQueue, &msg, portMAX_DELAY) == pdTRUE)
         {
-            bool result = handleAuthInitialization();
-            sendAuthResult(result);
+            bool isRegistered = handleAuthInitialization();
+            sendAuthResult(isRegistered);
+
+            if (isRegistered && mqttConnect())
+            {
+                uint8_t msg = 1;
+                xQueueSend(enableSensorsQueue, &msg, 0);
+                xQueueSend(enablePmsPollingQueue, &msg, 0);
+            }
         }
     }
 }

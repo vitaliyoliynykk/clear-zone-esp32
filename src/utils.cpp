@@ -17,7 +17,7 @@ std::pair<std::string, std::string> splitStr(const std::string &in, char sep)
   return {in.substr(0, pos), in.substr(pos + 1)};
 }
 
-bool ensureTimeSynced(unsigned long timeoutMs = 10000)
+bool ensureTimeSynced(unsigned long timeoutMs = 15000)
 {
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
   unsigned long start = millis();

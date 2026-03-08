@@ -103,6 +103,7 @@ void handlePairingModeEnter()
       pairingActive = true;
       bootPressed = false;
 
+      deletePrefs();
       toggleDeviceBLEAdvertising(true);
     }
     else if (!digitalRead(BOOT_PIN))
