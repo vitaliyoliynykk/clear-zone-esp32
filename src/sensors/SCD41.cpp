@@ -10,6 +10,46 @@
 SensirionI2cScd4x sensor;
 static char errorMessage[64];
 static int16_t error;
+static constexpr uint32_t SCD41_DATA_READY_TIMEOUT_MS = 10000;
+static constexpr uint32_t SCD41_STOP_MEASUREMENT_DELAY_MS = 500;
+static constexpr uint32_t SCD41_REINIT_DELAY_MS = 30;
+
+static bool restartPeriodicMeasurement()
+{
+    error = sensor.stopPeriodicMeasurement();
+    if (error != NO_ERROR)
+    {
+        Serial.print("Error trying to execute stopPeriodicMeasurement(): ");
+        errorToString(error, errorMessage, sizeof errorMessage);
+        Serial.println(errorMessage);
+        return false;
+    }
+
+    delay(SCD41_STOP_MEASUREMENT_DELAY_MS);
+
+    error = sensor.reinit();
+    if (error != NO_ERROR)
+    {
+        Serial.print("Error trying to execute reinit(): ");
+        errorToString(error, errorMessage, sizeof errorMessage);
+        Serial.println(errorMessage);
+        return false;
+    }
+
+    delay(SCD41_REINIT_DELAY_MS);
+
+    error = sensor.startPeriodicMeasurement();
+    if (error != NO_ERROR)
+    {
+        Serial.print("Error trying to execute startPeriodicMeasurement(): ");
+        errorToString(error, errorMessage, sizeof errorMessage);
+        Serial.println(errorMessage);
+        return false;
+    }
+
+    Serial.println("SCD41 periodic measurement restarted");
+    return true;
+}
 
 void PrintUint64(uint64_t &value)
 {
@@ -24,28 +64,7 @@ void initCOSensor()
 
     uint64_t serialNumber = 0;
     delay(30);
-    // Ensure sensor is in clean state
-    error = sensor.wakeUp();
-    if (error != NO_ERROR)
-    {
-        Serial.print("Error trying to execute wakeUp(): ");
-        errorToString(error, errorMessage, sizeof errorMessage);
-        Serial.println(errorMessage);
-    }
-    error = sensor.stopPeriodicMeasurement();
-    if (error != NO_ERROR)
-    {
-        Serial.print("Error trying to execute stopPeriodicMeasurement(): ");
-        errorToString(error, errorMessage, sizeof errorMessage);
-        Serial.println(errorMessage);
-    }
-    error = sensor.reinit();
-    if (error != NO_ERROR)
-    {
-        Serial.print("Error trying to execute reinit(): ");
-        errorToString(error, errorMessage, sizeof errorMessage);
-        Serial.println(errorMessage);
-    }
+
     // Read out information about the sensor
     error = sensor.getSerialNumber(serialNumber);
     if (error != NO_ERROR)
@@ -75,6 +94,7 @@ uint16_t readCO2()
     uint16_t co2Concentration = 0;
     float temperature = 0.0;
     float relativeHumidity = 0.0;
+    const uint32_t waitStart = millis();
 
     error = sensor.getDataReadyStatus(dataReady);
     if (error != NO_ERROR)
@@ -86,8 +106,17 @@ uint16_t readCO2()
     }
     while (!dataReady)
     {
+        if (millis() - waitStart >= SCD41_DATA_READY_TIMEOUT_MS)
+        {
+            Serial.println("SCD41 timeout waiting for dataReady, restarting sensor");
+            restartPeriodicMeasurement();
+            return 0;
+        }
+
+        Serial.println("Getting CO2 DATA");
         delay(100);
         error = sensor.getDataReadyStatus(dataReady);
+        Serial.println(error);
         if (error != NO_ERROR)
         {
             Serial.print("Error trying to execute getDataReadyStatus(): ");

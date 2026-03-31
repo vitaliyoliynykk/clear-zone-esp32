@@ -41,179 +41,179 @@ QueueSetHandle_t sensorQueueSet = xQueueCreateSet(QUEUE_SET_LEN);
 
 namespace
 {
-constexpr uint32_t WIFI_RECONNECT_INITIAL_MS = 5000;
-constexpr uint32_t WIFI_RECONNECT_MAX_MS = 60000;
-constexpr uint32_t MQTT_RECONNECT_INITIAL_MS = 2000;
-constexpr uint32_t MQTT_RECONNECT_MAX_MS = 30000;
-constexpr uint32_t AUTH_RECONNECT_INITIAL_MS = 5000;
-constexpr uint32_t AUTH_RECONNECT_MAX_MS = 60000;
-constexpr TickType_t CONNECTION_POLL_DELAY = pdMS_TO_TICKS(250);
+    constexpr uint32_t WIFI_RECONNECT_INITIAL_MS = 5000;
+    constexpr uint32_t WIFI_RECONNECT_MAX_MS = 60000;
+    constexpr uint32_t MQTT_RECONNECT_INITIAL_MS = 2000;
+    constexpr uint32_t MQTT_RECONNECT_MAX_MS = 30000;
+    constexpr uint32_t AUTH_RECONNECT_INITIAL_MS = 5000;
+    constexpr uint32_t AUTH_RECONNECT_MAX_MS = 60000;
+    constexpr TickType_t CONNECTION_POLL_DELAY = pdMS_TO_TICKS(250);
 
-volatile bool authInProgress = false;
-bool sensorsStarted = false;
-bool wifiClientReady = false;
-uint32_t nextWifiReconnectAt = 0;
-uint32_t nextMqttReconnectAt = 0;
-uint32_t nextAuthRetryAt = 0;
-uint32_t wifiReconnectBackoffMs = WIFI_RECONNECT_INITIAL_MS;
-uint32_t mqttReconnectBackoffMs = MQTT_RECONNECT_INITIAL_MS;
-uint32_t authReconnectBackoffMs = AUTH_RECONNECT_INITIAL_MS;
+    volatile bool authInProgress = false;
+    bool sensorsStarted = false;
+    bool wifiClientReady = false;
+    uint32_t nextWifiReconnectAt = 0;
+    uint32_t nextMqttReconnectAt = 0;
+    uint32_t nextAuthRetryAt = 0;
+    uint32_t wifiReconnectBackoffMs = WIFI_RECONNECT_INITIAL_MS;
+    uint32_t mqttReconnectBackoffMs = MQTT_RECONNECT_INITIAL_MS;
+    uint32_t authReconnectBackoffMs = AUTH_RECONNECT_INITIAL_MS;
 
-bool isRetryDue(uint32_t now, uint32_t retryAt)
-{
-    return static_cast<int32_t>(now - retryAt) >= 0;
-}
-
-void resetReconnect(uint32_t &retryAt, uint32_t &backoffMs, uint32_t initialMs)
-{
-    retryAt = 0;
-    backoffMs = initialMs;
-}
-
-void scheduleReconnect(uint32_t now, uint32_t &retryAt, uint32_t &backoffMs, uint32_t maxMs)
-{
-    retryAt = now + backoffMs;
-    backoffMs = std::min(backoffMs * 2U, maxMs);
-}
-
-void enableSensorTasksOnce()
-{
-    if (sensorsStarted)
+    bool isRetryDue(uint32_t now, uint32_t retryAt)
     {
-        return;
+        return static_cast<int32_t>(now - retryAt) >= 0;
     }
 
-    uint8_t msg = 1;
-    xQueueSend(enableSensorsQueue, &msg, 0);
-    xQueueSend(enablePmsPollingQueue, &msg, 0);
-    sensorsStarted = true;
-}
-
-void resetConnectionStateAfterWifiLoss()
-{
-    if (mqtt.connected())
+    void resetReconnect(uint32_t &retryAt, uint32_t &backoffMs, uint32_t initialMs)
     {
-        mqtt.disconnect();
+        retryAt = 0;
+        backoffMs = initialMs;
     }
 
-    wifiClientReady = false;
-}
-
-bool ensureWifiConnected(uint32_t now)
-{
-    if (WiFi.status() == WL_CONNECTED)
+    void scheduleReconnect(uint32_t now, uint32_t &retryAt, uint32_t &backoffMs, uint32_t maxMs)
     {
-        return true;
+        retryAt = now + backoffMs;
+        backoffMs = std::min(backoffMs * 2U, maxMs);
     }
 
-    resetConnectionStateAfterWifiLoss();
-
-    if (!isRetryDue(now, nextWifiReconnectAt))
+    void enableSensorTasksOnce()
     {
+        if (sensorsStarted)
+        {
+            return;
+        }
+
+        uint8_t msg = 1;
+        xQueueSend(enableSensorsQueue, &msg, 0);
+        xQueueSend(enablePmsPollingQueue, &msg, 0);
+        sensorsStarted = true;
+    }
+
+    void resetConnectionStateAfterWifiLoss()
+    {
+        if (mqtt.connected())
+        {
+            mqtt.disconnect();
+        }
+
+        wifiClientReady = false;
+    }
+
+    bool ensureWifiConnected(uint32_t now)
+    {
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            return true;
+        }
+
+        resetConnectionStateAfterWifiLoss();
+
+        if (!isRetryDue(now, nextWifiReconnectAt))
+        {
+            return false;
+        }
+
+        Serial.println("[WIFI] Attempting reconnect");
+
+        if (autoconnectToWifi())
+        {
+            resetReconnect(nextWifiReconnectAt, wifiReconnectBackoffMs, WIFI_RECONNECT_INITIAL_MS);
+            nextMqttReconnectAt = 0;
+            return true;
+        }
+
+        Serial.printf("[WIFI] Reconnect failed, status=%d\n", WiFi.status());
+        scheduleReconnect(now, nextWifiReconnectAt, wifiReconnectBackoffMs, WIFI_RECONNECT_MAX_MS);
         return false;
     }
 
-    Serial.println("[WIFI] Attempting reconnect");
-
-    if (autoconnectToWifi())
+    bool ensureMqttCreds(uint32_t now)
     {
-        resetReconnect(nextWifiReconnectAt, wifiReconnectBackoffMs, WIFI_RECONNECT_INITIAL_MS);
-        nextMqttReconnectAt = 0;
-        return true;
-    }
+        std::string mqttUser;
+        std::string mqttPass;
 
-    Serial.printf("[WIFI] Reconnect failed, status=%d\n", WiFi.status());
-    scheduleReconnect(now, nextWifiReconnectAt, wifiReconnectBackoffMs, WIFI_RECONNECT_MAX_MS);
-    return false;
-}
+        if (loadMqttCreds(mqttUser, mqttPass))
+        {
+            return true;
+        }
 
-bool ensureMqttCreds(uint32_t now)
-{
-    std::string mqttUser;
-    std::string mqttPass;
+        if (authInProgress || !isRetryDue(now, nextAuthRetryAt))
+        {
+            return false;
+        }
 
-    if (loadMqttCreds(mqttUser, mqttPass))
-    {
-        return true;
-    }
+        if (requestAuth())
+        {
+            Serial.println("[AUTH] Requested MQTT credentials");
+            scheduleReconnect(now, nextAuthRetryAt, authReconnectBackoffMs, AUTH_RECONNECT_MAX_MS);
+        }
 
-    if (authInProgress || !isRetryDue(now, nextAuthRetryAt))
-    {
         return false;
     }
 
-    if (requestAuth())
+    void requestAuthRefresh(uint32_t now)
     {
-        Serial.println("[AUTH] Requested MQTT credentials");
+        if (requestAuth())
+        {
+            Serial.println("[AUTH] Requested credential refresh");
+        }
+
         scheduleReconnect(now, nextAuthRetryAt, authReconnectBackoffMs, AUTH_RECONNECT_MAX_MS);
     }
 
-    return false;
-}
-
-void requestAuthRefresh(uint32_t now)
-{
-    if (requestAuth())
+    bool ensureMqttConnected(uint32_t now)
     {
-        Serial.println("[AUTH] Requested credential refresh");
-    }
+        if (mqtt.connected())
+        {
+            return true;
+        }
 
-    scheduleReconnect(now, nextAuthRetryAt, authReconnectBackoffMs, AUTH_RECONNECT_MAX_MS);
-}
+        if (!wifiClientReady)
+        {
+            setupWifiClient();
+            wifiClientReady = true;
+            nextMqttReconnectAt = 0;
+        }
 
-bool ensureMqttConnected(uint32_t now)
-{
-    if (mqtt.connected())
-    {
-        return true;
-    }
+        if (!ensureMqttCreds(now) || !isRetryDue(now, nextMqttReconnectAt))
+        {
+            return false;
+        }
 
-    if (!wifiClientReady)
-    {
-        setupWifiClient();
-        wifiClientReady = true;
-        nextMqttReconnectAt = 0;
-    }
+        if (mqttConnect())
+        {
+            resetReconnect(nextMqttReconnectAt, mqttReconnectBackoffMs, MQTT_RECONNECT_INITIAL_MS);
+            enableSensorTasksOnce();
+            return true;
+        }
 
-    if (!ensureMqttCreds(now) || !isRetryDue(now, nextMqttReconnectAt))
-    {
+        const int mqttState = mqtt.state();
+        if (mqttState == MQTT_CONNECT_BAD_CREDENTIALS || mqttState == MQTT_CONNECT_UNAUTHORIZED)
+        {
+            requestAuthRefresh(now);
+        }
+
+        scheduleReconnect(now, nextMqttReconnectAt, mqttReconnectBackoffMs, MQTT_RECONNECT_MAX_MS);
         return false;
     }
 
-    if (mqttConnect())
+    void handleMqttDisconnect(uint32_t now, const char *reason)
     {
-        resetReconnect(nextMqttReconnectAt, mqttReconnectBackoffMs, MQTT_RECONNECT_INITIAL_MS);
-        enableSensorTasksOnce();
-        return true;
+        Serial.printf("[MQTT] %s, state=%d\n", reason, mqtt.state());
+        mqtt.disconnect();
+        nextMqttReconnectAt = now;
     }
 
-    const int mqttState = mqtt.state();
-    if (mqttState == MQTT_CONNECT_BAD_CREDENTIALS || mqttState == MQTT_CONNECT_UNAUTHORIZED)
+    bool publishPayload(const String &topicName, const char *payload)
     {
-        requestAuthRefresh(now);
+        if (mqtt.publish(topicName.c_str(), payload))
+        {
+            return true;
+        }
+
+        handleMqttDisconnect(millis(), "Publish failed");
+        return false;
     }
-
-    scheduleReconnect(now, nextMqttReconnectAt, mqttReconnectBackoffMs, MQTT_RECONNECT_MAX_MS);
-    return false;
-}
-
-void handleMqttDisconnect(uint32_t now, const char *reason)
-{
-    Serial.printf("[MQTT] %s, state=%d\n", reason, mqtt.state());
-    mqtt.disconnect();
-    nextMqttReconnectAt = now;
-}
-
-bool publishPayload(const String &topicName, const char *payload)
-{
-    if (mqtt.publish(topicName.c_str(), payload))
-    {
-        return true;
-    }
-
-    handleMqttDisconnect(millis(), "Publish failed");
-    return false;
-}
 } // namespace
 
 void MqttTask(void *param);
@@ -391,6 +391,7 @@ void SensorsTask(void *param)
 
     if (xQueueReceive(enableSensorsQueue, &msg, portMAX_DELAY) == pdTRUE)
     {
+        Serial.println("[DEBUG] Sensors enabled");
         readingWindowStart = millis();
         for (;;)
         {
@@ -407,6 +408,7 @@ void SensorsTask(void *param)
 
                 float gasResistanceAvg = gasResistandeAgg.avg();
                 float gasSensorHumidityAvg = gasSensorHumidityAgg.avg();
+                Serial.println("[DEBUG] Readings averaged");
 
                 std::array<float, 2> sht31Avg = {tempAvg, humAvg};
                 std::array<float, 3> pmsAvg = {pm10Avg, pm25Avg, pm100Avg};
@@ -428,12 +430,17 @@ void SensorsTask(void *param)
                 pm100Agg.reset();
 
                 readingWindowStart = millis();
+
+                Serial.println("[DEBUG] Readings reset and sent");
+                Serial.println("[DEBUG] --------END CYCLE--------");
             }
             std::array<uint16_t, 3> pmReading;
             std::pair<uint32_t, float> bmeReading;
 
             auto sht31Reading = mesureSht31();
+            Serial.println("[DEBUG] sht31Reading");
             uint16_t co2Reading = readCO2();
+            Serial.println("[DEBUG] co2Reading");
 
             if (readPMS(pmReading))
             {
@@ -441,6 +448,7 @@ void SensorsTask(void *param)
                 pm25Agg.add(pmReading[1]);
                 pm100Agg.add(pmReading[2]);
             }
+            Serial.println("[DEBUG] pmReading");
 
             if (getIsBMEReady() && readGas(bmeReading))
             {
@@ -450,6 +458,9 @@ void SensorsTask(void *param)
                 gasResistandeAgg.add(gasResistance);
                 gasSensorHumidityAgg.add(humidity);
             }
+            Serial.println("[DEBUG] bmeReading");
+
+            Serial.println("[DEBUG] ------END READING-------");
 
             tempAgg.add(sht31Reading[0]);
             humAgg.add(sht31Reading[1]);
