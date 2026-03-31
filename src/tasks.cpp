@@ -15,6 +15,7 @@
 #include "BME680.h"
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 const uint16_t READING_INTERVAL = 60000;
 const uint16_t PMS_POLLING_INTERVAL = 1000;
@@ -41,6 +42,12 @@ QueueSetHandle_t sensorQueueSet = xQueueCreateSet(QUEUE_SET_LEN);
 
 namespace
 {
+    struct BmeAverages
+    {
+        uint32_t gasResistance;
+        float sensorHumidity;
+    };
+
     constexpr uint32_t WIFI_RECONNECT_INITIAL_MS = 5000;
     constexpr uint32_t WIFI_RECONNECT_MAX_MS = 60000;
     constexpr uint32_t MQTT_RECONNECT_INITIAL_MS = 2000;
@@ -232,7 +239,7 @@ void initRTOS()
                             sizeof(std::array<float, 3>));
     co2Queue = xQueueCreate(C02_QUEUE_LEN, sizeof(float));
     bmeQueue = xQueueCreate(BME_QUEUE_LEN,
-                            sizeof(std::array<float, 2>));
+                            sizeof(BmeAverages));
 
     xQueueAddToSet(sht31Queue, sensorQueueSet);
     xQueueAddToSet(co2Queue, sensorQueueSet);
@@ -285,7 +292,7 @@ void AuthTask(void *param)
 void MqttTask(void *param)
 {
     QueueSetMemberHandle_t activated;
-    char payload[84];
+    char payload[256];
 
     for (;;)
     {
@@ -353,15 +360,15 @@ void MqttTask(void *param)
         }
         else if (activated == bmeQueue)
         {
-            std::array<float, 2> bmeReading;
+            BmeAverages bmeReading;
 
             if (xQueueReceive(bmeQueue, &bmeReading, 0))
             {
                 snprintf(
                     payload,
                     sizeof(payload),
-                    "{\"gas_resistance\":%.2f,\"sensor_humidity\":%.2f,\"uptime_seconds\":%llu}",
-                    bmeReading[0], bmeReading[1], getBmeUptimeSec());
+                    "{\"gas_resistance\":%lu,\"sensor_humidity\":%.2f,\"uptime_seconds\":%llu}",
+                    static_cast<unsigned long>(bmeReading.gasResistance), bmeReading.sensorHumidity, getBmeUptimeSec());
 
                 publishPayload(bmeTopic, payload);
             }
@@ -406,13 +413,13 @@ void SensorsTask(void *param)
                 float pm25Avg = pm25Agg.avg();
                 float pm100Avg = pm100Agg.avg();
 
-                float gasResistanceAvg = gasResistandeAgg.avg();
+                uint32_t gasResistanceAvg = static_cast<uint32_t>(std::lround(gasResistandeAgg.avg()));
                 float gasSensorHumidityAvg = gasSensorHumidityAgg.avg();
                 Serial.println("[DEBUG] Readings averaged");
 
                 std::array<float, 2> sht31Avg = {tempAvg, humAvg};
                 std::array<float, 3> pmsAvg = {pm10Avg, pm25Avg, pm100Avg};
-                std::array<float, 2> bmeAvg = {gasResistanceAvg, gasSensorHumidityAvg};
+                BmeAverages bmeAvg = {gasResistanceAvg, gasSensorHumidityAvg};
 
                 xQueueSend(co2Queue, &co2Avg, 0);
                 xQueueSend(sht31Queue, &sht31Avg, 0);
