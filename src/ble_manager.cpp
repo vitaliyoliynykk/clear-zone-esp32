@@ -58,8 +58,7 @@ class WifiCredsCharacteristicCallbacks : public NimBLECharacteristicCallbacks
     if (res == WL_CONNECTED)
     {
       toggleDeviceBLEAdvertising(false);
-      uint8_t msg = 1;
-      xQueueSend(authQueue, &msg, 0);
+      requestAuth();
     }
   }
 };

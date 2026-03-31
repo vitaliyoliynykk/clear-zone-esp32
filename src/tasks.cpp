@@ -6,11 +6,14 @@
 #include "http_manager.h"
 #include "ble_manager.h"
 #include "mqtt_setup.h"
+#include "wifi_manager.h"
+#include "preferences_manager.h"
 #include "utils.h"
 #include "SHT31.h"
 #include "SCD41.h"
 #include "PMS5003.h"
 #include "BME680.h"
+#include <algorithm>
 #include <array>
 
 const uint16_t READING_INTERVAL = 60000;
@@ -24,6 +27,7 @@ const uint8_t C02_QUEUE_LEN = 1;
 const uint8_t PMS_QUEUE_LEN = 4;
 const uint8_t BME_QUEUE_LEN = 4;
 const uint8_t QUEUE_SET_LEN = SHT31_QUEUE_LEN + C02_QUEUE_LEN + PMS_QUEUE_LEN + BME_QUEUE_LEN;
+const uint16_t MQTT_TASK_STACK_SIZE = 12288;
 
 QueueHandle_t authQueue;
 QueueHandle_t enableSensorsQueue;
@@ -34,6 +38,183 @@ QueueHandle_t bmeQueue;
 QueueHandle_t co2Queue;
 
 QueueSetHandle_t sensorQueueSet = xQueueCreateSet(QUEUE_SET_LEN);
+
+namespace
+{
+constexpr uint32_t WIFI_RECONNECT_INITIAL_MS = 5000;
+constexpr uint32_t WIFI_RECONNECT_MAX_MS = 60000;
+constexpr uint32_t MQTT_RECONNECT_INITIAL_MS = 2000;
+constexpr uint32_t MQTT_RECONNECT_MAX_MS = 30000;
+constexpr uint32_t AUTH_RECONNECT_INITIAL_MS = 5000;
+constexpr uint32_t AUTH_RECONNECT_MAX_MS = 60000;
+constexpr TickType_t CONNECTION_POLL_DELAY = pdMS_TO_TICKS(250);
+
+volatile bool authInProgress = false;
+bool sensorsStarted = false;
+bool wifiClientReady = false;
+uint32_t nextWifiReconnectAt = 0;
+uint32_t nextMqttReconnectAt = 0;
+uint32_t nextAuthRetryAt = 0;
+uint32_t wifiReconnectBackoffMs = WIFI_RECONNECT_INITIAL_MS;
+uint32_t mqttReconnectBackoffMs = MQTT_RECONNECT_INITIAL_MS;
+uint32_t authReconnectBackoffMs = AUTH_RECONNECT_INITIAL_MS;
+
+bool isRetryDue(uint32_t now, uint32_t retryAt)
+{
+    return static_cast<int32_t>(now - retryAt) >= 0;
+}
+
+void resetReconnect(uint32_t &retryAt, uint32_t &backoffMs, uint32_t initialMs)
+{
+    retryAt = 0;
+    backoffMs = initialMs;
+}
+
+void scheduleReconnect(uint32_t now, uint32_t &retryAt, uint32_t &backoffMs, uint32_t maxMs)
+{
+    retryAt = now + backoffMs;
+    backoffMs = std::min(backoffMs * 2U, maxMs);
+}
+
+void enableSensorTasksOnce()
+{
+    if (sensorsStarted)
+    {
+        return;
+    }
+
+    uint8_t msg = 1;
+    xQueueSend(enableSensorsQueue, &msg, 0);
+    xQueueSend(enablePmsPollingQueue, &msg, 0);
+    sensorsStarted = true;
+}
+
+void resetConnectionStateAfterWifiLoss()
+{
+    if (mqtt.connected())
+    {
+        mqtt.disconnect();
+    }
+
+    wifiClientReady = false;
+}
+
+bool ensureWifiConnected(uint32_t now)
+{
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        return true;
+    }
+
+    resetConnectionStateAfterWifiLoss();
+
+    if (!isRetryDue(now, nextWifiReconnectAt))
+    {
+        return false;
+    }
+
+    Serial.println("[WIFI] Attempting reconnect");
+
+    if (autoconnectToWifi())
+    {
+        resetReconnect(nextWifiReconnectAt, wifiReconnectBackoffMs, WIFI_RECONNECT_INITIAL_MS);
+        nextMqttReconnectAt = 0;
+        return true;
+    }
+
+    Serial.printf("[WIFI] Reconnect failed, status=%d\n", WiFi.status());
+    scheduleReconnect(now, nextWifiReconnectAt, wifiReconnectBackoffMs, WIFI_RECONNECT_MAX_MS);
+    return false;
+}
+
+bool ensureMqttCreds(uint32_t now)
+{
+    std::string mqttUser;
+    std::string mqttPass;
+
+    if (loadMqttCreds(mqttUser, mqttPass))
+    {
+        return true;
+    }
+
+    if (authInProgress || !isRetryDue(now, nextAuthRetryAt))
+    {
+        return false;
+    }
+
+    if (requestAuth())
+    {
+        Serial.println("[AUTH] Requested MQTT credentials");
+        scheduleReconnect(now, nextAuthRetryAt, authReconnectBackoffMs, AUTH_RECONNECT_MAX_MS);
+    }
+
+    return false;
+}
+
+void requestAuthRefresh(uint32_t now)
+{
+    if (requestAuth())
+    {
+        Serial.println("[AUTH] Requested credential refresh");
+    }
+
+    scheduleReconnect(now, nextAuthRetryAt, authReconnectBackoffMs, AUTH_RECONNECT_MAX_MS);
+}
+
+bool ensureMqttConnected(uint32_t now)
+{
+    if (mqtt.connected())
+    {
+        return true;
+    }
+
+    if (!wifiClientReady)
+    {
+        setupWifiClient();
+        wifiClientReady = true;
+        nextMqttReconnectAt = 0;
+    }
+
+    if (!ensureMqttCreds(now) || !isRetryDue(now, nextMqttReconnectAt))
+    {
+        return false;
+    }
+
+    if (mqttConnect())
+    {
+        resetReconnect(nextMqttReconnectAt, mqttReconnectBackoffMs, MQTT_RECONNECT_INITIAL_MS);
+        enableSensorTasksOnce();
+        return true;
+    }
+
+    const int mqttState = mqtt.state();
+    if (mqttState == MQTT_CONNECT_BAD_CREDENTIALS || mqttState == MQTT_CONNECT_UNAUTHORIZED)
+    {
+        requestAuthRefresh(now);
+    }
+
+    scheduleReconnect(now, nextMqttReconnectAt, mqttReconnectBackoffMs, MQTT_RECONNECT_MAX_MS);
+    return false;
+}
+
+void handleMqttDisconnect(uint32_t now, const char *reason)
+{
+    Serial.printf("[MQTT] %s, state=%d\n", reason, mqtt.state());
+    mqtt.disconnect();
+    nextMqttReconnectAt = now;
+}
+
+bool publishPayload(const String &topicName, const char *payload)
+{
+    if (mqtt.publish(topicName.c_str(), payload))
+    {
+        return true;
+    }
+
+    handleMqttDisconnect(millis(), "Publish failed");
+    return false;
+}
+} // namespace
 
 void MqttTask(void *param);
 void AuthTask(void *param);
@@ -60,8 +241,25 @@ void initRTOS()
 
     xTaskCreatePinnedToCore(AuthTask, "AuthTask", 8192, nullptr, 1, nullptr, 1);
     xTaskCreatePinnedToCore(SensorsTask, "SensorsTask", 2048, nullptr, 1, nullptr, 1);
-    xTaskCreatePinnedToCore(MqttTask, "MqttTask", 4096, nullptr, 1, nullptr, 1);
+    xTaskCreatePinnedToCore(MqttTask, "MqttTask", MQTT_TASK_STACK_SIZE, nullptr, 1, nullptr, 1);
     xTaskCreatePinnedToCore(PmsPollingTask, "PmsPollingTask", 2048, nullptr, 1, nullptr, 1);
+}
+
+bool requestAuth()
+{
+    if (authInProgress)
+    {
+        return false;
+    }
+
+    uint8_t msg = 1;
+    if (xQueueSend(authQueue, &msg, 0) != pdTRUE)
+    {
+        return false;
+    }
+
+    authInProgress = true;
+    return true;
 }
 
 void AuthTask(void *param)
@@ -73,12 +271,12 @@ void AuthTask(void *param)
         {
             bool isRegistered = handleAuthInitialization();
             sendAuthResult(isRegistered);
+            authInProgress = false;
 
-            if (isRegistered && mqttConnect())
+            if (isRegistered)
             {
-                uint8_t msg = 1;
-                xQueueSend(enableSensorsQueue, &msg, 0);
-                xQueueSend(enablePmsPollingQueue, &msg, 0);
+                resetReconnect(nextAuthRetryAt, authReconnectBackoffMs, AUTH_RECONNECT_INITIAL_MS);
+                nextMqttReconnectAt = 0;
             }
         }
     }
@@ -91,7 +289,21 @@ void MqttTask(void *param)
 
     for (;;)
     {
-        mqtt.loop();
+        const uint32_t now = millis();
+
+        if (!ensureWifiConnected(now) || !ensureMqttConnected(now))
+        {
+            vTaskDelay(CONNECTION_POLL_DELAY);
+            continue;
+        }
+
+        if (!mqtt.loop())
+        {
+            handleMqttDisconnect(now, "Loop failed");
+            vTaskDelay(CONNECTION_POLL_DELAY);
+            continue;
+        }
+
         activated = xQueueSelectFromSet(sensorQueueSet, pdMS_TO_TICKS(100));
 
         if (activated == sht31Queue)
@@ -106,7 +318,7 @@ void MqttTask(void *param)
                     msg[0],
                     msg[1]);
 
-                mqtt.publish(tempTopic.c_str(), payload);
+                publishPayload(tempTopic, payload);
             }
         }
         else if (activated == co2Queue)
@@ -121,7 +333,7 @@ void MqttTask(void *param)
                     "{\"co2\":%.2f}",
                     co2Reding);
 
-                mqtt.publish(co2Topic.c_str(), payload);
+                publishPayload(co2Topic, payload);
             }
         }
         else if (activated == pmsQueue)
@@ -136,7 +348,7 @@ void MqttTask(void *param)
                     "{\"pm10\":%.2f,\"pm25\":%.2f,\"pm100\":%.2f}",
                     pmsReading[0], pmsReading[1], pmsReading[2]);
 
-                mqtt.publish(pmsTopic.c_str(), payload);
+                publishPayload(pmsTopic, payload);
             }
         }
         else if (activated == bmeQueue)
@@ -148,10 +360,10 @@ void MqttTask(void *param)
                 snprintf(
                     payload,
                     sizeof(payload),
-                    "{\"gas_resistance\":%.2f,\"sensor_humidity\":%.2f,\"uptime_seconds\":%d}",
+                    "{\"gas_resistance\":%.2f,\"sensor_humidity\":%.2f,\"uptime_seconds\":%llu}",
                     bmeReading[0], bmeReading[1], getBmeUptimeSec());
 
-                mqtt.publish(bmeTopic.c_str(), payload);
+                publishPayload(bmeTopic, payload);
             }
         }
 

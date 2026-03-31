@@ -35,7 +35,8 @@ bool mqttConnect()
     {
         mqtt.setServer(MQTT_HOST, MQTT_PORT);
         mqtt.setCallback(onMqttMessage);
-        mqtt.setKeepAlive(5);
+        mqtt.setKeepAlive(60);
+        mqtt.setSocketTimeout(10);
 
         const char *willPayload = "{\"status\":\"offline\"}";
 
@@ -46,7 +47,7 @@ bool mqttConnect()
             return false;
         }
 
-        mqtt.publish(statusTopic.c_str(), "{\"status\":\"online\"}");
+        mqtt.publish(statusTopic.c_str(), "{\"status\":\"online\"}", true);
         Serial.println("[MQTT] Connected!");
 
         return true;

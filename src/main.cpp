@@ -4,9 +4,7 @@
 #include "wifi_manager.h"
 #include "utils.h"
 #include "ble_manager.h"
-#include "http_manager.h"
 #include "preferences_manager.h"
-#include "mqtt_setup.h"
 #include "SHT31.h"
 #include "SCD41.h"
 #include "BME680.h"
@@ -38,8 +36,10 @@ void IRAM_ATTR onBootPressed()
 
 void setup()
 {
+  esp_reset_reason_t reason = esp_reset_reason();
   Serial.begin(9600);
   Serial.printf("Starting Clear Zone Module [ID]: %s \n", CHIP_ID);
+  Serial.printf("Reset reason: %d \n", reason);
 
   // I2C Init
   Wire.begin(21, 22); // SDA, SCL
@@ -65,24 +65,7 @@ void setup()
 
   // WIFI Setup
   WiFi.mode(WIFI_STA);
-
-  bool isConnected = autoconnectToWifi();
-
-  // Auth, MQTT Setup, BLE Setup
-  if (isConnected)
-  {
-    delay(2000); // Wait for DNS
-    setupWifiClient();
-    if (handleAuthInitialization())
-    {
-      if (mqttConnect())
-      {
-        uint8_t msg = 1;
-        xQueueSend(enableSensorsQueue, &msg, 0);
-        xQueueSend(enablePmsPollingQueue, &msg, 0);
-      }
-    }
-  }
+  autoconnectToWifi();
 
   setupBLEServer();
 }
