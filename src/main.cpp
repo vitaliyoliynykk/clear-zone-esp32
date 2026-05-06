@@ -1,14 +1,16 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <Wire.h>
 #include "wifi_manager.h"
 #include "utils.h"
 #include "ble_manager.h"
-#include "http_manager.h"
 #include "preferences_manager.h"
-#include "mqtt_setup.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
+#include "SHT31.h"
+#include "SCD41.h"
+#include "BME680.h"
+#include "PMS5003.h"
+#include "tasks.h"
+#include <array>
 
 constexpr uint32_t PAIRING_HOLD_MS = 5000;
 volatile bool bootPressed = false;
@@ -16,7 +18,6 @@ static bool pairingActive = false;
 volatile uint32_t bootPressStart = 0;
 
 void handlePairingModeEnter();
-void AuthTask(void *param);
 
 void IRAM_ATTR onBootPressed()
 {
@@ -35,36 +36,42 @@ void IRAM_ATTR onBootPressed()
 
 void setup()
 {
+  esp_reset_reason_t reason = esp_reset_reason();
   Serial.begin(9600);
   Serial.printf("Starting Clear Zone Module [ID]: %s \n", CHIP_ID);
+  Serial.printf("Reset reason: %d \n", reason);
 
-  authQueue = xQueueCreate(1, sizeof(uint8_t));
-  xTaskCreatePinnedToCore(AuthTask, "AuthTask", 8192, nullptr, 1, nullptr, 1);
+  // I2C Init
+  Wire.begin(21, 22); // SDA, SCL
 
+  // Wait for sensors to turn on
+  delay(1000);
+
+  // Sensors
+  initSht31();
+  initCOSensor();
+  initBME();
+  initPMS();
+
+  // FreeRTOS
+  initRTOS();
+
+  // Pins setup
   pinMode(BT_LED_PIN, OUTPUT);
   pinMode(BOOT_PIN, INPUT_PULLUP);
+
+  // Interrupts
   attachInterrupt(digitalPinToInterrupt(BOOT_PIN), onBootPressed, FALLING);
 
+  // WIFI Setup
   WiFi.mode(WIFI_STA);
-
-  bool isConnected = autoconnectToWifi();
-
-  if (isConnected)
-  {
-    delay(2000); // Wait for DNS
-    setupWifiClient();
-    if (handleAuthInitialization())
-    {
-      mqttConnect();
-    }
-  }
+  autoconnectToWifi();
 
   setupBLEServer();
 }
 
 void loop()
 {
-  mqtt.loop();
   handlePairingModeEnter();
   delay(50);
 }
@@ -79,6 +86,7 @@ void handlePairingModeEnter()
       pairingActive = true;
       bootPressed = false;
 
+      deletePrefs();
       toggleDeviceBLEAdvertising(true);
     }
     else if (!digitalRead(BOOT_PIN))
@@ -95,18 +103,5 @@ void handlePairingModeEnter()
   if (pairingActive && deviceConnectedToBLE)
   {
     pairingActive = false;
-  }
-}
-
-void AuthTask(void *param)
-{
-  uint8_t msg;
-  for (;;)
-  {
-    if (xQueueReceive(authQueue, &msg, portMAX_DELAY) == pdTRUE)
-    {
-      bool result = handleAuthInitialization();
-      sendAuthResult(result);
-    }
   }
 }

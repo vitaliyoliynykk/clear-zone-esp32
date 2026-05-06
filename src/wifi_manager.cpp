@@ -44,9 +44,6 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 
 void scanWiFi(NimBLECharacteristic *notifyNetworks)
 {
-    WiFi.disconnect();
-    delay(100);
-
     String wifiData = "";
 
     int n = WiFi.scanNetworks();
@@ -67,9 +64,11 @@ void scanWiFi(NimBLECharacteristic *notifyNetworks)
                 wifiData += ";";
         }
 
-        notifyNetworks->setValue(wifiData.c_str());
-        notifyNetworks->notify();
     }
+
+    notifyNetworks->setValue(wifiData.c_str());
+    notifyNetworks->notify();
+    WiFi.scanDelete();
 }
 bool autoconnectToWifi()
 {
@@ -78,6 +77,7 @@ bool autoconnectToWifi()
 
     if (loadWifiCreds(ssid, pass))
     {
+        WiFi.setAutoReconnect(true);
         WiFi.begin(ssid.c_str(), pass.c_str());
 
         wl_status_t res = (wl_status_t)WiFi.waitForConnectResult(15000);
@@ -99,6 +99,7 @@ bool autoconnectToWifi()
 
 wl_status_t connectToWifi(std::string ssid, std::string pass)
 {
+    WiFi.setAutoReconnect(true);
     WiFi.begin(ssid.c_str(), pass.c_str());
 
     wl_status_t res = (wl_status_t)WiFi.waitForConnectResult(8000);

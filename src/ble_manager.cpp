@@ -4,6 +4,7 @@
 #include "wifi_manager.h"
 #include "http_manager.h"
 #include "utils.h"
+#include "tasks.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 
@@ -57,8 +58,7 @@ class WifiCredsCharacteristicCallbacks : public NimBLECharacteristicCallbacks
     if (res == WL_CONNECTED)
     {
       toggleDeviceBLEAdvertising(false);
-      uint8_t msg = 1;
-      xQueueSend(authQueue, &msg, 0);
+      requestAuth();
     }
   }
 };

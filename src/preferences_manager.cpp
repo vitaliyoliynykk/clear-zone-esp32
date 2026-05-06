@@ -2,11 +2,16 @@
 #include "preferences_manager.h"
 #include "utils.h"
 
-Preferences prefs;
-
 bool hasToken()
 {
+    Preferences prefs;
     prefs.begin(PREF_AUTH_KEY, true);
+
+    if (!prefs.isKey("moduleToken"))
+    {
+        prefs.end();
+        return false;
+    }
 
     String token = prefs.getString("moduleToken", "");
     prefs.end();
@@ -19,7 +24,14 @@ bool hasToken()
 
 bool loadModuleToken(std::string &moduleToken)
 {
+    Preferences prefs;
     prefs.begin(PREF_AUTH_KEY, true);
+
+    if (!prefs.isKey("moduleToken"))
+    {
+        prefs.end();
+        return false;
+    }
 
     String token = prefs.getString("moduleToken", "");
 
@@ -35,6 +47,7 @@ bool loadModuleToken(std::string &moduleToken)
 
 void saveWifiCreds(const std::string &ssid, const std::string &pass)
 {
+    Preferences prefs;
     prefs.begin(PREF_WIFI_KEY, false);
 
     prefs.putString("ssid", ssid.c_str());
@@ -45,7 +58,14 @@ void saveWifiCreds(const std::string &ssid, const std::string &pass)
 
 bool loadWifiCreds(std::string &ssid, std::string &pass)
 {
+    Preferences prefs;
     prefs.begin(PREF_WIFI_KEY, true);
+
+    if (!prefs.isKey("ssid") || !prefs.isKey("pass"))
+    {
+        prefs.end();
+        return false;
+    }
 
     String s = prefs.getString("ssid", "");
     String p = prefs.getString("pass", "");
@@ -63,6 +83,7 @@ bool loadWifiCreds(std::string &ssid, std::string &pass)
 
 void saveModuleCreds(const char *moduleToken, const char *mqttUsername, const char *mqttPass)
 {
+    Preferences prefs;
     prefs.begin(PREF_AUTH_KEY, false);
 
     prefs.putString("moduleToken", moduleToken);
@@ -72,9 +93,37 @@ void saveModuleCreds(const char *moduleToken, const char *mqttUsername, const ch
     prefs.end();
 }
 
+void deletePrefs()
+{
+    Preferences prefs;
+    prefs.begin(PREF_AUTH_KEY, false);
+
+    prefs.remove("moduleToken");
+    prefs.remove("mqttUsername");
+    prefs.remove("mqttPass");
+
+    prefs.end();
+
+    prefs.begin(PREF_WIFI_KEY, false);
+
+    prefs.remove("ssid");
+    prefs.remove("pass");
+
+    prefs.end();
+
+    Serial.println("Prefs deleted");
+}
+
 bool loadMqttCreds(std::string &mqttUsername, std::string &mqttPass)
 {
+    Preferences prefs;
     prefs.begin(PREF_AUTH_KEY, true);
+
+    if (!prefs.isKey("mqttUsername") || !prefs.isKey("mqttPass"))
+    {
+        prefs.end();
+        return false;
+    }
 
     String username = prefs.getString("mqttUsername", "");
     String password = prefs.getString("mqttPass", "");

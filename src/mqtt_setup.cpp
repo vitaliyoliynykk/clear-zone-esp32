@@ -9,7 +9,12 @@
 const char *MQTT_HOST = "0a485ffbbe9140d2b244b49d6c3ef435.s1.eu.hivemq.cloud";
 const uint16_t MQTT_PORT = 8883;
 
-String statusTopic = "devices/" + CHIP_ID + "/status";
+String topic = "devices/" + CHIP_ID;
+String statusTopic = topic + "/status";
+String tempTopic = topic + "/temp";
+String co2Topic = topic + "/co2";
+String pmsTopic = topic + "/pms";
+String bmeTopic = topic + "/bme";
 
 PubSubClient mqtt(wifiClient);
 
@@ -30,7 +35,8 @@ bool mqttConnect()
     {
         mqtt.setServer(MQTT_HOST, MQTT_PORT);
         mqtt.setCallback(onMqttMessage);
-        mqtt.setKeepAlive(5);
+        mqtt.setKeepAlive(60);
+        mqtt.setSocketTimeout(10);
 
         const char *willPayload = "{\"status\":\"offline\"}";
 
@@ -41,7 +47,7 @@ bool mqttConnect()
             return false;
         }
 
-        mqtt.publish(statusTopic.c_str(), "{\"status\":\"online\"}");
+        mqtt.publish(statusTopic.c_str(), "{\"status\":\"online\"}", true);
         Serial.println("[MQTT] Connected!");
 
         return true;

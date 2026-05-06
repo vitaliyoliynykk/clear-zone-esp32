@@ -4,7 +4,6 @@
 #include "utils.h"
 
 String CHIP_ID = String((uint32_t)ESP.getEfuseMac(), HEX);
-QueueHandle_t authQueue;
 
 const char PROVISION_SECRET[] = "clear-zone-device-sc-dd8b172f-7b6d-489c-a346-5a05a6b5f5a4";
 const char PREF_WIFI_KEY[] = "wifi-creds";
@@ -18,7 +17,7 @@ std::pair<std::string, std::string> splitStr(const std::string &in, char sep)
   return {in.substr(0, pos), in.substr(pos + 1)};
 }
 
-bool ensureTimeSynced(unsigned long timeoutMs = 10000)
+bool ensureTimeSynced(unsigned long timeoutMs = 15000)
 {
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
   unsigned long start = millis();
