@@ -29,3 +29,18 @@ bool ensureTimeSynced(unsigned long timeoutMs = 15000)
   } while ((now < 1672531200 /* 2023-01-01 */) && (millis() - start < timeoutMs));
   return now >= 1672531200;
 }
+
+std::array<char, 48> jsonNumber(float value)
+{
+    // Enough room for any finite float formatted with two decimal places.
+    std::array<char, 48> result{};
+    if (std::isfinite(value))
+    {
+        snprintf(result.data(), result.size(), "%.2f", value);
+    }
+    else
+    {
+        snprintf(result.data(), result.size(), "null");
+    }
+    return result;
+}

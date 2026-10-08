@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "tasks.h"
+#include "utils.h"
 #include "task_context.h"
 #include "sensor_messages.h"
 #include "retry_backoff.h"
@@ -172,9 +173,9 @@ namespace
             snprintf(
                 payload,
                 sizeof(payload),
-                "{\"temp\":%.2f,\"hum\":%.2f}",
-                msg.temperature,
-                msg.humidity);
+                "{\"temp\":%s,\"hum\":%s}",
+                jsonNumber(msg.temperature).data(),
+                jsonNumber(msg.humidity).data());
 
             publishPayload(tempTopic, payload);
         }
@@ -190,8 +191,8 @@ namespace
             snprintf(
                 payload,
                 sizeof(payload),
-                "{\"co2\":%.2f}",
-                co2Reding);
+                "{\"co2\":%s}",
+                jsonNumber(co2Reding).data());
 
             publishPayload(co2Topic, payload);
         }
@@ -207,8 +208,10 @@ namespace
             snprintf(
                 payload,
                 sizeof(payload),
-                "{\"pm10\":%.2f,\"pm25\":%.2f,\"pm100\":%.2f}",
-                pmsReading.pm1, pmsReading.pm2_5, pmsReading.pm10);
+                "{\"pm10\":%s,\"pm25\":%s,\"pm100\":%s}",
+                jsonNumber(pmsReading.pm1).data(),
+                jsonNumber(pmsReading.pm2_5).data(),
+                jsonNumber(pmsReading.pm10).data());
 
             publishPayload(pmsTopic, payload);
         }
@@ -224,8 +227,8 @@ namespace
             snprintf(
                 payload,
                 sizeof(payload),
-                "{\"gas_resistance\":%lu,\"sensor_humidity\":%.2f,\"uptime_seconds\":%llu}",
-                static_cast<unsigned long>(bmeReading.gasResistance), bmeReading.sensorHumidity, getBmeUptimeSec());
+                "{\"gas_resistance\":%lu,\"sensor_humidity\":%s,\"uptime_seconds\":%llu}",
+                static_cast<unsigned long>(bmeReading.gasResistance), jsonNumber(bmeReading.sensorHumidity).data(), getBmeUptimeSec());
 
             publishPayload(bmeTopic, payload);
         }

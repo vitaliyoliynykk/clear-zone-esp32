@@ -21,7 +21,7 @@ namespace
         WindowAgg tempAgg;
         WindowAgg humAgg;
 
-        WindowAgg gasResistandeAgg;
+        WindowAgg gasResistanceAgg;
         WindowAgg gasSensorHumidityAgg;
 
         WindowAgg pm10Agg;
@@ -52,7 +52,7 @@ namespace
             uint32_t gasResistance = bmeReading.first;
             float humidity = bmeReading.second;
 
-            window.gasResistandeAgg.add(gasResistance);
+            window.gasResistanceAgg.add(gasResistance);
             window.gasSensorHumidityAgg.add(humidity);
         }
         Serial.println("[DEBUG] bmeReading");
@@ -75,7 +75,7 @@ namespace
         float pm25Avg = window.pm25Agg.avg();
         float pm100Avg = window.pm100Agg.avg();
 
-        uint32_t gasResistanceAvg = static_cast<uint32_t>(std::lround(window.gasResistandeAgg.avg()));
+        uint32_t gasResistanceAvg = static_cast<uint32_t>(std::lround(window.gasResistanceAgg.avg()));
         float gasSensorHumidityAvg = window.gasSensorHumidityAgg.avg();
         Serial.println("[DEBUG] Readings averaged");
 
@@ -100,6 +100,8 @@ namespace
         window.pm10Agg.reset();
         window.pm25Agg.reset();
         window.pm100Agg.reset();
+        window.gasResistanceAgg.reset();
+        window.gasSensorHumidityAgg.reset();
         // Preserve the existing BME accumulation across reading windows.
     }
 
