@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <string>
@@ -44,3 +45,5 @@ extern const char PREF_AUTH_KEY[];
 
 std::pair<std::string, std::string> splitStr(const std::string &in, char sep);
 bool ensureTimeSynced(unsigned long timeoutMs);
+
+std::array<char, 48> jsonNumber(float value);
